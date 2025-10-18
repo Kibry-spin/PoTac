@@ -1,0 +1,97 @@
+{
+  "application": {
+    "name": "PoTac",
+    "version": "1.0.0",
+    "author": "PoTac Development Team"
+  },
+  "camera": {
+    "oak": {
+      "rgb_fps": 30,
+      "rgb_resolution": "THE_1080_P",
+      "rgb_preview_size": [640, 480],
+      "rgb_video_size": [1920, 1080],
+      "rgb_interleaved": false,
+      "rgb_color_order": "BGR",
+      "max_queue_size": 4,
+      "blocking_queue": false,
+      "enable_video_recording": true,
+      "video_codec": "h264",
+      "video_quality": 95
+    }
+  },
+  "aruco_optimized": {
+    "enabled": true,
+    "dictionary_type": "DICT_4X4_250",
+    "marker_size": 0.015,
+    "left_id": 1,
+    "right_id": 0,
+    "draw_markers": true,
+    "draw_axes": false,
+    "estimate_pose": false,
+    "draw_rejected": false,
+    "detection_params": {
+      "minMarkerPerimeterRate": 0.03,
+      "maxMarkerPerimeterRate": 4.0,
+      "polygonalApproxAccuracyRate": 0.05,
+      "minOtsuStdDev": 5.0,
+      "adaptiveThreshWinSizeMin": 5,
+      "adaptiveThreshWinSizeMax": 23,
+      "adaptiveThreshWinSizeStep": 10,
+      "adaptiveThreshConstant": 7,
+      "minCornerDistanceRate": 0.05,
+      "minDistanceToBorder": 3,
+      "minMarkerDistanceRate": 0.05,
+      "maxErroneousBitsInBorderRate": 0.35,
+      "errorCorrectionRate": 0.6,
+      "cornerRefinementMethod": "CORNER_REFINE_SUBPIX",
+      "cornerRefinementWinSize": 5,
+      "cornerRefinementMaxIterations": 30,
+      "cornerRefinementMinAccuracy": 0.1,
+      "perspectiveRemovePixelPerCell": 8,
+      "perspectiveRemoveIgnoredMarginPerCell": 0.13
+    },
+    "enhancement": {
+      "enabled": true,
+      "bilateral_filter": true,
+      "clahe_enabled": true,
+      "clahe_clip_limit": 3.0,
+      "clahe_tile_size": [4, 4],
+      "unsharp_masking": true,
+      "unsharp_strength": 1.5,
+      "unsharp_gaussian_blur": [3, 3],
+      "additional_sharpening": true,
+      "morphological_cleanup": true,
+      "morphological_kernel_size": [2, 2]
+    }
+  },
+  "camera_calibration": {
+    "camera_matrix": null,
+    "dist_coeffs": null,
+    "calibrated": false
+  },
+  "data": {
+    "default_format": "hdf5",
+    "output_directory": "./data",
+    "auto_create_session_dirs": true,
+    "compression": true,
+    "queue_size": 1000,
+    "enable_mp4_recording": true
+  },
+  "gui": {
+    "window_size": [1200, 800],
+    "fullscreen": false,
+    "language": "en_US",
+    "theme": "dark",
+    "update_rate": 30
+  },
+  "recording": {
+    "auto_start_sensors": true,
+    "default_session_name_format": "potac_session_%Y%m%d_%H%M%S",
+    "max_recording_duration_hours": 24,
+    "low_space_warning_gb": 5.0
+  },
+  "visuotactile_sensors": {
+    "enabled": false,
+    "sensors": []
+  }
+}

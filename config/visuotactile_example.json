@@ -1,0 +1,49 @@
+{
+  "visuotactile_sensors": {
+    "enabled": true,
+    "sensors": [
+      {
+        "id": "vt_left",
+        "camera_id": 2,
+        "name": "Left Tactile Sensor",
+        "config": {
+          "resolution": [640, 480],
+          "fps": 30,
+          "exposure": -1,
+          "brightness": 128,
+          "contrast": 128,
+          "saturation": 128,
+          "record_fourcc": "mp4v",
+          "record_extension": ".mp4",
+          "enable_preprocessing": false,
+          "preprocessing": {
+            "denoise": false,
+            "enhance_contrast": false,
+            "color_correction": false
+          }
+        }
+      },
+      {
+        "id": "vt_right",
+        "camera_id": 4,
+        "name": "Right Tactile Sensor",
+        "config": {
+          "resolution": [640, 480],
+          "fps": 30,
+          "exposure": -1,
+          "brightness": 128,
+          "contrast": 128,
+          "saturation": 128,
+          "record_fourcc": "mp4v",
+          "record_extension": ".mp4",
+          "enable_preprocessing": true,
+          "preprocessing": {
+            "denoise": true,
+            "enhance_contrast": true,
+            "color_correction": false
+          }
+        }
+      }
+    ]
+  }
+}
