@@ -26,6 +26,8 @@ class PoTacApp(App):
         super().__init__(**kwargs)
         self.data_manager = None
         self.sensor_manager = None
+        self.gui_fps = 30.0  # Default GUI refresh rate
+        self.update_event = None
 
     def build(self):
         """Build the main application interface"""
@@ -40,8 +42,8 @@ class PoTacApp(App):
                 sensor_manager=self.sensor_manager
             )
 
-            # Start periodic updates
-            Clock.schedule_interval(self.update, 1.0/30.0)  # 30 FPS
+            # Start periodic updates with adaptive framerate
+            self.update_event = Clock.schedule_interval(self.update, 1.0/self.gui_fps)
 
             Logger.info("PoTac: Application initialized successfully")
             return self.root
@@ -62,6 +64,20 @@ class PoTacApp(App):
         """Update application state"""
         if self.root and hasattr(self.root, 'update'):
             self.root.update(dt)
+
+    def set_gui_fps(self, fps):
+        """Change GUI refresh rate (useful during recording)"""
+        if fps <= 0 or fps > 60:
+            return
+
+        self.gui_fps = fps
+
+        # Reschedule update event
+        if self.update_event:
+            self.update_event.cancel()
+
+        self.update_event = Clock.schedule_interval(self.update, 1.0/self.gui_fps)
+        Logger.info(f"PoTacApp: GUI refresh rate set to {fps} FPS")
 
     def on_stop(self):
         """Clean up resources on application exit"""

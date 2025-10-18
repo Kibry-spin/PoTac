@@ -16,6 +16,8 @@ from pathlib import Path
 
 from src.utils.video_device_scanner import VideoDeviceScanner
 from src.gui.sensor_selector_dialog import SensorSelectorDialog
+from src.data.synchronized_recorder import SynchronizedRecorder
+from src.data.video_merger import merge_session_videos
 
 
 class MainWindow(BoxLayout):
@@ -30,6 +32,10 @@ class MainWindow(BoxLayout):
         # Video device scanner
         self.video_scanner = VideoDeviceScanner()
         self.available_devices = []
+
+        # Synchronized recorder
+        self.sync_recorder = None
+        self.recording_gui_fps = 15  # Lower FPS during recording to save resources
 
         self.setup_ui()
         self.setup_sensors()
@@ -343,9 +349,13 @@ class MainWindow(BoxLayout):
 
             # Update visuotactile sensors - always update regardless of OAK camera status
             sensor_data = self.sensor_manager.get_sensor_data()
+            vt_frames = {}
             if sensor_data and 'visuotactile' in sensor_data:
                 vt_frames = sensor_data['visuotactile']
                 self._update_visuotactile_displays(vt_frames)
+
+            # Recording is now handled by sensor threads, not GUI
+            # This ensures full frame rate recording independent of GUI refresh rate
 
             # Update VT sensor status
             self.update_vt_sensor_status()
@@ -504,67 +514,154 @@ class MainWindow(BoxLayout):
             self.stop_recording()
 
     def start_recording(self):
-        """Start MP4 video recording for all sensors"""
+        """Start synchronized multi-sensor recording"""
         try:
             output_dir = self.dir_input.text
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            success_count = 0
-            fail_count = 0
+            # Create synchronized recorder
+            self.sync_recorder = SynchronizedRecorder(output_dir)
 
-            # Start OAK camera recording
-            if hasattr(self.sensor_manager.oak_camera, 'start_video_recording'):
-                oak_video_filename = f"oak_camera_{timestamp}.mp4"
-                oak_video_path = Path(output_dir) / oak_video_filename
-                if self.sensor_manager.oak_camera.start_video_recording(str(oak_video_path)):
-                    Logger.info(f"MainWindow: Started OAK camera recording")
-                    success_count += 1
-                else:
-                    Logger.warning("MainWindow: Failed to start OAK camera recording")
-                    fail_count += 1
+            # Add OAK camera if available
+            oak_added = False
+            if hasattr(self.sensor_manager.oak_camera, 'get_status'):
+                oak_status = self.sensor_manager.oak_camera.get_status()
+                if oak_status.get('device_connected', False):
+                    # Pass the actual OAK camera object for direct frame access
+                    self.sync_recorder.add_sensor(
+                        'oak_camera',
+                        'OAK_Camera',
+                        self.sensor_manager.oak_camera,
+                        fps=30
+                    )
+                    oak_added = True
+                    Logger.info("MainWindow: Added OAK camera to recording")
 
-            # Start visuotactile sensor recording
-            if self.sensor_manager.vt_sensor_manager.start_recording_all(output_dir):
-                Logger.info(f"MainWindow: Started visuotactile sensor recording")
-                success_count += 1
-            else:
-                Logger.warning("MainWindow: No visuotactile sensors to record")
+            # Add all visuotactile sensors
+            vt_sensors = self.sensor_manager.get_connected_visuotactile_sensors()
+            vt_count = 0
+            for sensor_id in vt_sensors:
+                sensor = self.sensor_manager.get_visuotactile_sensor(sensor_id)
+                if sensor and sensor.running:
+                    # Pass the actual sensor object for direct frame access
+                    self.sync_recorder.add_sensor(sensor_id, sensor.name, sensor, fps=30)
+                    vt_count += 1
+                    Logger.info(f"MainWindow: Added '{sensor.name}' to recording")
 
-            if success_count > 0:
+            total_sensors = (1 if oak_added else 0) + vt_count
+
+            if total_sensors == 0:
+                Logger.error("MainWindow: No sensors available for recording")
+                self.status_label.text = 'Status: No sensors to record'
+                self.status_label.color = (1, 0, 0, 1)
+                self.sync_recorder = None
+                return
+
+            # Start recording
+            if self.sync_recorder.start_recording():
                 self.record_button.text = 'Stop Recording'
                 self.record_button.background_color = (1, 0, 0, 1)
-                self.status_label.text = f'Status: Recording... ({success_count} sensors)'
+                self.status_label.text = f'Status: Recording {total_sensors} sensor(s)...'
                 self.status_label.color = (1, 0.5, 0, 1)  # Orange
+
+                # Lower GUI refresh rate to save resources
+                from kivy.app import App
+                app = App.get_running_app()
+                if hasattr(app, 'set_gui_fps'):
+                    app.set_gui_fps(self.recording_gui_fps)
+                    Logger.info(f"MainWindow: Reduced GUI FPS to {self.recording_gui_fps} during recording")
+
+                Logger.info(f"MainWindow: Started synchronized recording - {total_sensors} sensors")
             else:
-                Logger.error("MainWindow: No sensors available for recording")
-                self.status_label.text = 'Status: No sensors ready'
+                Logger.error("MainWindow: Failed to start synchronized recording")
+                self.status_label.text = 'Status: Recording start failed'
                 self.status_label.color = (1, 0, 0, 1)
+                self.sync_recorder = None
 
         except Exception as e:
             Logger.error(f"MainWindow: Failed to start recording: {e}")
-            self.status_label.text = 'Status: Record start failed'
+            self.status_label.text = 'Status: Recording error'
             self.status_label.color = (1, 0, 0, 1)
+            self.sync_recorder = None
 
     def stop_recording(self):
-        """Stop MP4 video recording for all sensors"""
+        """Stop synchronized recording and merge videos"""
         try:
-            # Stop OAK camera recording
-            if hasattr(self.sensor_manager.oak_camera, 'stop_video_recording'):
-                self.sensor_manager.oak_camera.stop_video_recording()
-                Logger.info("MainWindow: Stopped OAK camera recording")
+            if not self.sync_recorder:
+                return
 
-            # Stop visuotactile sensor recording
-            self.sensor_manager.vt_sensor_manager.stop_recording_all()
-            Logger.info("MainWindow: Stopped visuotactile sensor recording")
+            # Restore normal GUI refresh rate
+            from kivy.app import App
+            app = App.get_running_app()
+            if hasattr(app, 'set_gui_fps'):
+                app.set_gui_fps(30)
+                Logger.info("MainWindow: Restored normal GUI FPS")
+
+            # Stop recording
+            stats = self.sync_recorder.stop_recording()
 
             self.record_button.text = 'Start Recording'
             self.record_button.background_color = (0, 1, 0, 1)
-            self.status_label.text = 'Status: Sensors running'
-            self.status_label.color = (0, 1, 0, 1)
+
+            if stats:
+                session_dir = stats['session_dir']
+                duration = stats['duration']
+                total_frames = stats['total_frames']
+                dropped = stats['dropped_frames']
+
+                Logger.info(f"MainWindow: Recording complete - {duration:.1f}s, {total_frames} frames, {dropped} dropped")
+
+                # Show merging status
+                self.status_label.text = 'Status: Merging videos...'
+                self.status_label.color = (1, 1, 0, 1)  # Yellow
+
+                # Merge videos in background thread
+                import threading
+                merge_thread = threading.Thread(
+                    target=self._merge_videos_background,
+                    args=(session_dir,),
+                    daemon=True
+                )
+                merge_thread.start()
+            else:
+                self.status_label.text = 'Status: Sensors running'
+                self.status_label.color = (0, 1, 0, 1)
+
+            self.sync_recorder = None
 
         except Exception as e:
             Logger.error(f"MainWindow: Failed to stop recording: {e}")
+            self.status_label.text = 'Status: Stop recording error'
+            self.status_label.color = (1, 0, 0, 1)
+
+    def _merge_videos_background(self, session_dir):
+        """Merge videos in background thread"""
+        try:
+            Logger.info(f"MainWindow: Starting video merge for session: {session_dir}")
+
+            def progress_callback(progress):
+                Logger.info(f"MainWindow: Merge progress: {progress:.1f}%")
+
+            # Merge videos
+            merged_video = merge_session_videos(
+                session_dir,
+                layout='grid',
+                progress_callback=progress_callback
+            )
+
+            if merged_video:
+                Logger.info(f"MainWindow: Successfully merged videos -> {merged_video}")
+                # Update status (will show on next GUI update)
+                self.status_label.text = f'Status: Recording saved! {Path(session_dir).name}'
+                self.status_label.color = (0, 1, 0, 1)  # Green
+            else:
+                Logger.warning("MainWindow: Video merge failed")
+                self.status_label.text = 'Status: Merge failed (videos saved individually)'
+                self.status_label.color = (1, 1, 0, 1)  # Yellow
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Error merging videos - {e}")
+            self.status_label.text = 'Status: Merge error (videos saved individually)'
+            self.status_label.color = (1, 1, 0, 1)
 
     def toggle_aruco(self, instance):
         """Toggle ArUco detection"""

@@ -343,11 +343,18 @@ class OAKCamera:
             Logger.info("OAKCamera: Camera loop ended")
 
     def get_frame(self):
-        """Get the latest RGB frame"""
+        """Get the latest RGB frame for display"""
         with self.lock:
             if self.current_frame is not None:
                 # Convert BGR to RGB for Kivy display
                 return cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            return None
+
+    def get_frame_bgr(self):
+        """Get the latest BGR frame for recording (OpenCV format)"""
+        with self.lock:
+            if self.current_frame is not None:
+                return self.current_frame.copy()
             return None
 
     def get_frames(self):
