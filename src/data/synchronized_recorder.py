@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from kivy.logger import Logger
+from src.data.pkl_saver import TimestampAlignedDataSaver
 
 
 class SensorRecorder:
@@ -163,6 +164,10 @@ class SensorRecorder:
             'queue_size': self.frame_queue.qsize()
         }
 
+    def get_frame_count(self):
+        """Get current frame count (frames written so far)"""
+        return self.frames_written
+
 
 class SynchronizedRecorder:
     """
@@ -186,6 +191,12 @@ class SynchronizedRecorder:
         self.recording = False
         self.start_time = None
 
+        # PKL data saver for timestamp-aligned data
+        self.pkl_saver = TimestampAlignedDataSaver(output_dir, self.session_name)
+
+        # ArUco detection callback
+        self.aruco_callback = None  # Will be set to get ArUco results
+
         # Create session directory
         self.session_dir.mkdir(parents=True, exist_ok=True)
         Logger.info(f"SynchronizedRecorder: Session directory: {self.session_dir}")
@@ -208,6 +219,28 @@ class SynchronizedRecorder:
         filename = f"{sensor_name}_{self.session_name}.mp4"
         output_path = self.session_dir / filename
 
+        # Collect sensor metadata
+        sensor_metadata = {
+            'sensor_id': sensor_id,
+            'sensor_name': sensor_name,
+            'fps': fps,
+            'video_file': filename
+        }
+
+        # Get sensor-specific metadata
+        if hasattr(sensor_object, 'get_device_info'):
+            device_info = sensor_object.get_device_info()
+            if device_info:
+                sensor_metadata['device_info'] = device_info
+
+        if hasattr(sensor_object, 'get_status'):
+            status = sensor_object.get_status()
+            if status:
+                sensor_metadata['resolution'] = status.get('configuration', {}).get('rgb_video_size', (1920, 1080))
+
+        # Add metadata to PKL saver
+        self.pkl_saver.add_sensor_metadata(sensor_id, sensor_metadata)
+
         # Create recorder with sensor object
         recorder = SensorRecorder(sensor_id, output_path, fps, sensor_object=sensor_object)
         self.recorders[sensor_id] = recorder
@@ -226,6 +259,15 @@ class SynchronizedRecorder:
             return False
 
         try:
+            # Start PKL saver
+            self.pkl_saver.start_recording()
+
+            # Get ArUco metadata if callback is set
+            if self.aruco_callback:
+                aruco_info = self.aruco_callback()
+                if aruco_info:
+                    self.pkl_saver.add_aruco_metadata(aruco_info)
+
             # Start all recorders
             for recorder in self.recorders.values():
                 if not recorder.start():
@@ -256,6 +298,9 @@ class SynchronizedRecorder:
         self.recording = False
         duration = time.time() - self.start_time if self.start_time else 0
 
+        # Stop PKL saver
+        self.pkl_saver.stop_recording()
+
         # Get statistics
         total_frames = 0
         total_dropped = 0
@@ -265,6 +310,11 @@ class SynchronizedRecorder:
             total_dropped += stats['dropped_frames']
             Logger.info(f"  {stats['sensor_id']}: {stats['frames_written']} frames, {stats['dropped_frames']} dropped")
 
+        # Finalize and save PKL data
+        pkl_path = self.pkl_saver.finalize_and_save()
+        if pkl_path:
+            Logger.info(f"SynchronizedRecorder: PKL data saved to {pkl_path}")
+
         Logger.info(f"SynchronizedRecorder: Recording stopped - {duration:.1f}s, {total_frames} total frames, {total_dropped} dropped")
 
         return {
@@ -272,8 +322,26 @@ class SynchronizedRecorder:
             'duration': duration,
             'total_frames': total_frames,
             'dropped_frames': total_dropped,
-            'sensors': [r.sensor_id for r in self.recorders.values()]
+            'sensors': [r.sensor_id for r in self.recorders.values()],
+            'pkl_file': pkl_path
         }
+
+    def record_frame_data(self, timestamp, aruco_results=None):
+        """
+        Record frame data with timestamp and ArUco results
+
+        Should be called for each camera frame during recording
+
+        Args:
+            timestamp: Frame timestamp (seconds since start)
+            aruco_results: Optional ArUco detection results
+        """
+        if self.recording:
+            self.pkl_saver.add_camera_frame(timestamp, aruco_results)
+
+    def set_aruco_callback(self, callback):
+        """Set callback function to get ArUco info"""
+        self.aruco_callback = callback
 
     def get_session_dir(self):
         """Get session directory path"""
@@ -291,3 +359,9 @@ class SynchronizedRecorder:
         for sensor_id, recorder in self.recorders.items():
             stats[sensor_id] = recorder.get_stats()
         return stats
+
+    def get_camera_frame_count(self):
+        """Get current camera frame count for timestamp alignment"""
+        if 'oak_camera' in self.recorders:
+            return self.recorders['oak_camera'].get_frame_count()
+        return 0

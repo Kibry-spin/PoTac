@@ -91,6 +91,7 @@ class OAKCamera:
         self.camera_thread = None
         self.is_running = False
         self.current_frame = None
+        self.current_frame_seq_num = 0  # Frame sequence number from DepthAI
 
         # Video recording
         self.is_recording = False
@@ -341,6 +342,9 @@ class OAKCamera:
                         if frame is None or frame.size == 0:
                             continue
 
+                        # Get frame sequence number from DepthAI
+                        frame_seq_num = in_rgb.getSequenceNum()
+
                         # Process ArUco detection if enabled
                         processed_frame = frame.copy()
                         if self.aruco_enabled and self.aruco_detector:
@@ -348,6 +352,8 @@ class OAKCamera:
                                 processed_frame, detection_results = self.aruco_detector.detect_markers(frame)
                                 # Get full detection info including marker distance
                                 detection_info = self.aruco_detector.get_detection_info()
+                                # Add frame sequence number to detection info
+                                detection_info['frame_seq_num'] = frame_seq_num
                                 with self.lock:
                                     self.aruco_detection_results = detection_info
                             except Exception as e:
@@ -357,6 +363,7 @@ class OAKCamera:
                         # Save processed frame for display
                         with self.lock:
                             self.current_frame = processed_frame
+                            self.current_frame_seq_num = frame_seq_num
 
                         # Recording processing with frame skipping for stability
                         if self.is_recording and self.video_writer is not None:

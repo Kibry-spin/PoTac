@@ -12,6 +12,7 @@ from kivy.uix.textinput import TextInput
 from kivy.graphics.texture import Texture
 from kivy.logger import Logger
 import numpy as np
+import time
 from pathlib import Path
 
 from src.utils.video_device_scanner import VideoDeviceScanner
@@ -423,6 +424,12 @@ class MainWindow(BoxLayout):
                 self.auto_recorder.update(aruco_results)
                 self._update_auto_recorder_display()
 
+            # Record frame data if recording
+            if self.sync_recorder and aruco_results:
+                # Use camera timestamp as reference
+                timestamp = time.time() - self.sync_recorder.start_time if self.sync_recorder.start_time else 0
+                self.sync_recorder.record_frame_data(timestamp, aruco_results)
+
             # Update visuotactile sensors - always update regardless of OAK camera status
             sensor_data = self.sensor_manager.get_sensor_data()
             vt_frames = {}
@@ -637,6 +644,12 @@ class MainWindow(BoxLayout):
                 self.status_label.color = (1, 0, 0, 1)
                 self.sync_recorder = None
                 return
+
+            # Set ArUco callback for metadata collection
+            if oak_added and hasattr(self.sensor_manager.oak_camera, 'get_aruco_info'):
+                self.sync_recorder.set_aruco_callback(
+                    lambda: self.sensor_manager.oak_camera.get_aruco_info()
+                )
 
             # Start recording
             if self.sync_recorder.start_recording():
