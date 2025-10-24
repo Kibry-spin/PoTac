@@ -88,7 +88,16 @@
     "auto_start_sensors": true,
     "default_session_name_format": "potac_session_%Y%m%d_%H%M%S",
     "max_recording_duration_hours": 24,
-    "low_space_warning_gb": 5.0
+    "low_space_warning_gb": 5.0,
+    "distance_based_auto_recording": {
+      "enabled": false,
+      "start_threshold_mm": 85.0,
+      "stop_threshold_mm": 90.0,
+      "use_horizontal_distance": true,
+      "cooldown_seconds": 2.0,
+      "require_both_markers": true,
+      "min_stable_frames": 5
+    }
   },
   "visuotactile_sensors": {
     "enabled": false,

@@ -287,21 +287,30 @@ class ArUcoDetectorOptimized:
 
             # Pose estimation if enabled and calibrated
             if (self.config.get('estimate_pose', False) and self.calibrated and
-                corners is not None and len(corners) > 0):
+                hasattr(self, '_filtered_corners') and len(self._filtered_corners) > 0):
                 try:
                     marker_size = self.config.get('marker_size', 0.015)
-                    rvecs, tvecs = self._estimate_pose_markers(corners, marker_size)
+                    # Estimate pose for filtered markers only
+                    rvecs, tvecs = self._estimate_pose_markers(self._filtered_corners, marker_size)
 
                     if rvecs is not None and tvecs is not None:
-                        self.last_detection['poses'] = []
-                        for i in range(len(rvecs)):
-                            pose_data = {
-                                'id': self.last_detection['ids'][i] if i < len(self.last_detection['ids']) else -1,
-                                'rvec': rvecs[i].flatten().tolist(),
-                                'tvec': tvecs[i].flatten().tolist(),
-                                'distance': float(np.linalg.norm(tvecs[i]))
-                            }
-                            self.last_detection['poses'].append(pose_data)
+                        # Store pose information for each detected marker
+                        for i, marker_id in enumerate(self._filtered_ids):
+                            marker_id_int = int(marker_id[0]) if isinstance(marker_id, np.ndarray) else int(marker_id)
+
+                            tvec = tvecs[i].flatten()
+                            rvec = rvecs[i].flatten()
+
+                            # Update marker data with pose info
+                            if marker_id_int == self.left_id and self.last_detection.get('left_marker'):
+                                self.last_detection['left_marker']['tvec'] = tvec.tolist()
+                                self.last_detection['left_marker']['rvec'] = rvec.tolist()
+                                self.last_detection['left_marker']['z_distance'] = float(tvec[2])
+                            elif marker_id_int == self.right_id and self.last_detection.get('right_marker'):
+                                self.last_detection['right_marker']['tvec'] = tvec.tolist()
+                                self.last_detection['right_marker']['rvec'] = rvec.tolist()
+                                self.last_detection['right_marker']['z_distance'] = float(tvec[2])
+
                 except Exception as e:
                     Logger.warning(f"ArUcoDetectorOptimized: Pose estimation failed: {e}")
 
@@ -424,6 +433,90 @@ class ArUcoDetectorOptimized:
 
         return annotated_frame
 
+    def calculate_marker_distance(self):
+        """Calculate pixel distance between left and right marker centers"""
+        left_marker = self.last_detection.get('left_marker')
+        right_marker = self.last_detection.get('right_marker')
+
+        # Both markers must be detected
+        if left_marker is None or right_marker is None:
+            return None
+
+        # Get corners and calculate centers
+        left_corners = np.array(left_marker['corners']).reshape(-1, 2)
+        right_corners = np.array(right_marker['corners']).reshape(-1, 2)
+
+        left_center = np.mean(left_corners, axis=0)
+        right_center = np.mean(right_corners, axis=0)
+
+        # Calculate Euclidean distance
+        distance = np.linalg.norm(left_center - right_center)
+
+        return float(distance)
+
+    def calculate_real_distance_3d(self):
+        """Calculate real 3D distance between markers in millimeters using pose estimation"""
+        left_marker = self.last_detection.get('left_marker')
+        right_marker = self.last_detection.get('right_marker')
+
+        # Both markers must be detected and have pose information
+        if left_marker is None or right_marker is None:
+            return None
+
+        if 'tvec' not in left_marker or 'tvec' not in right_marker:
+            return None
+
+        try:
+            # Get 3D positions (translation vectors) in meters
+            left_tvec = np.array(left_marker['tvec'])
+            right_tvec = np.array(right_marker['tvec'])
+
+            # Calculate 3D Euclidean distance in meters (absolute distance)
+            distance_m = np.linalg.norm(right_tvec - left_tvec)
+
+            # Convert to millimeters
+            distance_mm = distance_m * 1000.0
+
+            return float(distance_mm)
+
+        except Exception as e:
+            Logger.warning(f"ArUcoDetectorOptimized: Failed to calculate 3D distance: {e}")
+            return None
+
+    def calculate_horizontal_distance(self):
+        """Calculate horizontal distance (XY plane) between markers in millimeters, excluding Z axis"""
+        left_marker = self.last_detection.get('left_marker')
+        right_marker = self.last_detection.get('right_marker')
+
+        # Both markers must be detected and have pose information
+        if left_marker is None or right_marker is None:
+            return None
+
+        if 'tvec' not in left_marker or 'tvec' not in right_marker:
+            return None
+
+        try:
+            # Get 3D positions (translation vectors) in meters
+            left_tvec = np.array(left_marker['tvec'])
+            right_tvec = np.array(right_marker['tvec'])
+
+            # Calculate horizontal distance (only X and Y components, ignore Z depth)
+            # tvec format: [x, y, z] where z is depth (perpendicular to camera)
+            dx = right_tvec[0] - left_tvec[0]  # X difference (horizontal)
+            dy = right_tvec[1] - left_tvec[1]  # Y difference (vertical in image)
+
+            # Calculate distance in XY plane only
+            horizontal_distance_m = np.sqrt(dx**2 + dy**2)
+
+            # Convert to millimeters
+            horizontal_distance_mm = horizontal_distance_m * 1000.0
+
+            return float(horizontal_distance_mm)
+
+        except Exception as e:
+            Logger.warning(f"ArUcoDetectorOptimized: Failed to calculate horizontal distance: {e}")
+            return None
+
     def get_detection_info(self):
         """Get formatted detection information for target markers only"""
         detected_ids = []
@@ -431,6 +524,15 @@ class ArUcoDetectorOptimized:
             detected_ids.append(self.left_id)
         if self.last_detection.get('right_marker'):
             detected_ids.append(self.right_id)
+
+        # Calculate pixel distance between markers
+        marker_distance = self.calculate_marker_distance()
+
+        # Calculate real 3D distance if pose estimation is enabled
+        real_distance_3d = self.calculate_real_distance_3d()
+
+        # Calculate horizontal distance (XY plane only)
+        horizontal_distance = self.calculate_horizontal_distance()
 
         return {
             'enabled': self.config.get('enabled', True),
@@ -442,7 +544,10 @@ class ArUcoDetectorOptimized:
             'total_candidates': self.last_detection.get('total_candidates', 0),
             'target_ids': [self.left_id, self.right_id],
             'dictionary': self.config.get('dictionary_type', 'DICT_4X4_250'),
-            'marker_size': self.config.get('marker_size', 0.015)
+            'marker_size': self.config.get('marker_size', 0.015),
+            'marker_distance': marker_distance,  # Distance in pixels between markers
+            'real_distance_3d': real_distance_3d,  # Real 3D absolute distance in millimeters
+            'horizontal_distance': horizontal_distance  # Horizontal distance (XY plane) in millimeters
         }
 
     def enable_detection(self, enabled=True):

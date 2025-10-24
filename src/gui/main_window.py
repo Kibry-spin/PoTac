@@ -18,6 +18,7 @@ from src.utils.video_device_scanner import VideoDeviceScanner
 from src.gui.sensor_selector_dialog import SensorSelectorDialog
 from src.data.synchronized_recorder import SynchronizedRecorder
 from src.data.video_merger import merge_session_videos
+from src.data.auto_recorder import DistanceBasedAutoRecorder, AutoRecordingState
 
 
 class MainWindow(BoxLayout):
@@ -36,6 +37,11 @@ class MainWindow(BoxLayout):
         # Synchronized recorder
         self.sync_recorder = None
         self.recording_gui_fps = 15  # Lower FPS during recording to save resources
+
+        # Auto-recording based on distance
+        self.auto_recorder = DistanceBasedAutoRecorder(config_file='./config/settings.json')
+        self.auto_recorder.on_recording_start = self.auto_start_recording
+        self.auto_recorder.on_recording_stop = self.auto_stop_recording
 
         self.setup_ui()
         self.setup_sensors()
@@ -172,6 +178,22 @@ class MainWindow(BoxLayout):
         self.aruco_info_label = Label(text='ArUco: Ready (Target: ID 0,1)', font_size='12sp')
         status_layout.add_widget(self.aruco_info_label)
 
+        # Camera calibration status
+        self.calibration_status_label = Label(text='Calibration: Pending', font_size='11sp', color=(1, 1, 0, 1))
+        status_layout.add_widget(self.calibration_status_label)
+
+        # Absolute distance display (3D)
+        self.distance_3d_label = Label(text='Absolute: --', font_size='12sp', color=(0.5, 1, 1, 1))
+        status_layout.add_widget(self.distance_3d_label)
+
+        # Horizontal distance display (XY plane)
+        self.distance_horizontal_label = Label(text='Horizontal: --', font_size='12sp', color=(0.5, 1, 1, 1))
+        status_layout.add_widget(self.distance_horizontal_label)
+
+        # Auto-recording status
+        self.auto_record_status_label = Label(text='Auto-Rec: OFF', font_size='11sp', color=(0.5, 0.5, 0.5, 1))
+        status_layout.add_widget(self.auto_record_status_label)
+
         # Visuotactile sensor status
         self.vt_sensor_status_label = Label(text='VT Sensors: None connected', font_size='12sp', color=(1, 1, 0, 1))
         status_layout.add_widget(self.vt_sensor_status_label)
@@ -232,11 +254,20 @@ class MainWindow(BoxLayout):
         # ArUco debug toggle
         self.debug_button = Button(
             text='Debug: OFF',
-            size_hint_x=0.12,
+            size_hint_x=0.11,
             background_color=(0.5, 0.5, 0.5, 1)  # Gray
         )
         self.debug_button.bind(on_press=self.toggle_debug)
         control_bar.add_widget(self.debug_button)
+
+        # Auto-recording toggle
+        self.auto_rec_button = Button(
+            text='Auto-Rec: OFF',
+            size_hint_x=0.12,
+            background_color=(0.5, 0.5, 0.5, 1)  # Gray
+        )
+        self.auto_rec_button.bind(on_press=self.toggle_auto_recording)
+        control_bar.add_widget(self.auto_rec_button)
 
         # VT Sensor Config
         vt_config_button = Button(
@@ -321,6 +352,16 @@ class MainWindow(BoxLayout):
             # Update ArUco detection info - simplified for target IDs
             if hasattr(self.sensor_manager.oak_camera, 'get_aruco_detection_results'):
                 aruco_results = self.sensor_manager.oak_camera.get_aruco_detection_results()
+
+                # Update calibration status
+                is_calibrated = aruco_results.get('calibrated', False)
+                if is_calibrated:
+                    self.calibration_status_label.text = 'Calibration: ✓ Factory'
+                    self.calibration_status_label.color = (0, 1, 0, 1)  # Green
+                else:
+                    self.calibration_status_label.text = 'Calibration: Pending'
+                    self.calibration_status_label.color = (1, 1, 0, 1)  # Yellow
+
                 if aruco_results and aruco_results.get('detection_count', 0) > 0:
                     left_marker = aruco_results.get('left_marker')
                     right_marker = aruco_results.get('right_marker')
@@ -337,6 +378,30 @@ class MainWindow(BoxLayout):
                     else:
                         self.aruco_info_label.text = 'ArUco: No target markers'
                         self.aruco_info_label.color = (1, 1, 0, 1)  # Yellow
+
+                    # Update distance displays
+                    marker_distance = aruco_results.get('marker_distance')
+                    real_distance_3d = aruco_results.get('real_distance_3d')
+                    horizontal_distance = aruco_results.get('horizontal_distance')
+
+                    # Update absolute 3D distance
+                    if real_distance_3d is not None:
+                        self.distance_3d_label.text = f'Absolute: {real_distance_3d:.1f} mm'
+                        self.distance_3d_label.color = (0, 1, 0.5, 1)  # Green for calibrated distance
+                    elif marker_distance is not None:
+                        self.distance_3d_label.text = f'Absolute: {marker_distance:.1f} px'
+                        self.distance_3d_label.color = (0, 1, 1, 1)  # Cyan for pixel distance
+                    else:
+                        self.distance_3d_label.text = 'Absolute: --'
+                        self.distance_3d_label.color = (0.5, 1, 1, 1)  # Dim cyan
+
+                    # Update horizontal distance (XY plane)
+                    if horizontal_distance is not None:
+                        self.distance_horizontal_label.text = f'Horizontal: {horizontal_distance:.1f} mm'
+                        self.distance_horizontal_label.color = (0.5, 1, 0, 1)  # Light green for horizontal
+                    else:
+                        self.distance_horizontal_label.text = 'Horizontal: --'
+                        self.distance_horizontal_label.color = (0.5, 1, 1, 1)  # Dim cyan
                 else:
                     # Show candidates when no target markers detected
                     candidates = aruco_results.get('total_candidates', 0) if aruco_results else 0
@@ -346,6 +411,17 @@ class MainWindow(BoxLayout):
                     else:
                         self.aruco_info_label.text = 'ArUco: Scanning for ID 0,1...'
                         self.aruco_info_label.color = (1, 1, 1, 1)  # White
+
+                    # Reset distance displays
+                    self.distance_3d_label.text = 'Absolute: --'
+                    self.distance_3d_label.color = (0.5, 1, 1, 1)  # Dim cyan
+                    self.distance_horizontal_label.text = 'Horizontal: --'
+                    self.distance_horizontal_label.color = (0.5, 1, 1, 1)  # Dim cyan
+
+            # Update auto-recorder with latest ArUco results
+            if self.auto_recorder.is_enabled():
+                self.auto_recorder.update(aruco_results)
+                self._update_auto_recorder_display()
 
             # Update visuotactile sensors - always update regardless of OAK camera status
             sensor_data = self.sensor_manager.get_sensor_data()
@@ -486,6 +562,12 @@ class MainWindow(BoxLayout):
     def stop_camera(self):
         """Stop camera preview and visuotactile sensors"""
         try:
+            # Stop auto-recording first if enabled
+            if self.auto_recorder.is_enabled():
+                self.auto_recorder.force_stop()
+                self.auto_recorder.enable(False)
+                Logger.info("MainWindow: Auto-recorder disabled on camera stop")
+
             if self.sensor_manager:
                 # Stop OAK camera
                 if self.sensor_manager.oak_camera:
@@ -680,6 +762,11 @@ class MainWindow(BoxLayout):
                     self.aruco_button.text = 'ArUco: OFF'
                     self.aruco_button.background_color = (0.5, 0.5, 0.5, 1)  # Gray
                     self.aruco_info_label.text = 'ArUco: Disabled'
+                    # Reset distance displays
+                    self.distance_3d_label.text = 'Absolute: --'
+                    self.distance_3d_label.color = (0.5, 1, 1, 1)  # Dim cyan
+                    self.distance_horizontal_label.text = 'Horizontal: --'
+                    self.distance_horizontal_label.color = (0.5, 1, 1, 1)  # Dim cyan
 
                 Logger.info(f"MainWindow: ArUco detection {'enabled' if new_state else 'disabled'}")
 
@@ -719,6 +806,14 @@ class MainWindow(BoxLayout):
 
     def exit_app(self, instance):
         """Exit application"""
+        # Safely stop auto-recorder
+        try:
+            if self.auto_recorder.is_enabled():
+                self.auto_recorder.force_stop()
+                Logger.info("MainWindow: Auto-recorder stopped on exit")
+        except Exception as e:
+            Logger.error(f"MainWindow: Error stopping auto-recorder: {e}")
+
         from kivy.app import App
         App.get_running_app().stop()
 
@@ -815,3 +910,103 @@ class MainWindow(BoxLayout):
 
         except Exception as e:
             Logger.warning(f"MainWindow: Error updating VT sensor status: {e}")
+
+    def toggle_auto_recording(self, instance):
+        """Toggle auto-recording feature"""
+        try:
+            current_enabled = self.auto_recorder.is_enabled()
+            new_enabled = not current_enabled
+
+            self.auto_recorder.enable(new_enabled)
+
+            if new_enabled:
+                self.auto_rec_button.text = 'Auto-Rec: ON'
+                self.auto_rec_button.background_color = (1, 0.5, 0, 1)  # Orange
+                self.auto_record_status_label.text = 'Auto-Rec: IDLE'
+                self.auto_record_status_label.color = (1, 1, 0, 1)  # Yellow
+                Logger.info("MainWindow: Auto-recording enabled")
+            else:
+                self.auto_rec_button.text = 'Auto-Rec: OFF'
+                self.auto_rec_button.background_color = (0.5, 0.5, 0.5, 1)  # Gray
+                self.auto_record_status_label.text = 'Auto-Rec: OFF'
+                self.auto_record_status_label.color = (0.5, 0.5, 0.5, 1)  # Gray
+                Logger.info("MainWindow: Auto-recording disabled")
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to toggle auto-recording: {e}")
+
+    def _update_auto_recorder_display(self):
+        """Update auto-recorder status display"""
+        try:
+            state_info = self.auto_recorder.get_state_info()
+            state = AutoRecordingState(state_info['state'])
+
+            # Update status label based on state
+            if state == AutoRecordingState.IDLE:
+                threshold = state_info['start_threshold']
+                self.auto_record_status_label.text = f'Auto-Rec: IDLE (< {threshold:.0f}mm to ARM)'
+                self.auto_record_status_label.color = (1, 1, 0, 1)  # Yellow
+
+            elif state == AutoRecordingState.ARMED:
+                stable = state_info['stable_frames']
+                distance = state_info.get('last_distance', 0)
+                self.auto_record_status_label.text = f'Auto-Rec: ARMED ({distance:.0f}mm, {stable} frames)'
+                self.auto_record_status_label.color = (1, 0.5, 0, 1)  # Orange
+
+            elif state == AutoRecordingState.RECORDING:
+                duration = state_info.get('recording_duration', 0)
+                threshold = state_info['stop_threshold']
+                self.auto_record_status_label.text = f'Auto-Rec: REC {duration:.0f}s (> {threshold:.0f}mm to STOP)'
+                self.auto_record_status_label.color = (1, 0, 0, 1)  # Red
+
+            elif state == AutoRecordingState.COOLDOWN:
+                remaining = state_info.get('cooldown_remaining', 0)
+                self.auto_record_status_label.text = f'Auto-Rec: COOLDOWN ({remaining:.1f}s)'
+                self.auto_record_status_label.color = (0.7, 0.7, 0.7, 1)  # Gray
+
+        except Exception as e:
+            Logger.warning(f"MainWindow: Failed to update auto-recorder display: {e}")
+
+    def auto_start_recording(self):
+        """Callback for auto-recorder to start recording"""
+        try:
+            # Safety check: don't start if already recording
+            if self.sync_recorder is not None:
+                Logger.warning("MainWindow: Auto-recording triggered but already recording manually")
+                return
+
+            # Safety check: camera must be running
+            if not self.sensor_manager or not self.sensor_manager.oak_camera:
+                Logger.error("MainWindow: Cannot auto-start recording - no camera")
+                return
+
+            if not self.sensor_manager.oak_camera.is_running:
+                Logger.error("MainWindow: Cannot auto-start recording - camera not running")
+                return
+
+            Logger.info("MainWindow: AUTO-STARTING RECORDING (distance threshold triggered)")
+
+            # Use the existing start_recording method
+            self.start_recording()
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to auto-start recording: {e}")
+            # Ensure auto-recorder knows recording failed
+            if self.sync_recorder is None:
+                self.auto_recorder.force_stop()
+
+    def auto_stop_recording(self):
+        """Callback for auto-recorder to stop recording"""
+        try:
+            # Safety check: only stop if we're actually recording
+            if self.sync_recorder is None:
+                Logger.warning("MainWindow: Auto-stop triggered but not recording")
+                return
+
+            Logger.info("MainWindow: AUTO-STOPPING RECORDING (distance threshold triggered)")
+
+            # Use the existing stop_recording method
+            self.stop_recording()
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to auto-stop recording: {e}")

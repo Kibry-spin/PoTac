@@ -138,6 +138,9 @@ class OAKCamera:
             # Get device information
             self._get_device_info()
 
+            # Load camera calibration from device
+            self._load_camera_calibration()
+
             Logger.info("OAKCamera: Successfully initialized with proper pipeline")
             return True
 
@@ -210,6 +213,59 @@ class OAKCamera:
 
         except Exception as e:
             Logger.warning(f"OAKCamera: Failed to get device info: {e}")
+
+    def _load_camera_calibration(self):
+        """Load camera calibration parameters from OAK device"""
+        try:
+            if not self.device:
+                Logger.warning("OAKCamera: Cannot load calibration - device not available")
+                return False
+
+            # Read calibration data from device
+            calib_data = self.device.readCalibration()
+
+            # Get RGB camera socket (CAM_A is the default RGB camera)
+            rgb_socket = dai.CameraBoardSocket.CAM_A
+
+            # Get resolution info for calibration
+            width, height, _ = self.config.get_resolution_info()
+
+            # Get intrinsic matrix for RGB camera at the target resolution
+            # The intrinsics are stored for specific resolutions, we get the closest one
+            intrinsics = calib_data.getCameraIntrinsics(rgb_socket, width, height)
+
+            # Get distortion coefficients
+            distortion = calib_data.getDistortionCoefficients(rgb_socket)
+
+            # Convert to numpy arrays
+            camera_matrix = np.array([
+                [intrinsics[0][0], 0, intrinsics[0][2]],
+                [0, intrinsics[1][1], intrinsics[1][2]],
+                [0, 0, 1]
+            ], dtype=np.float64)
+
+            dist_coeffs = np.array(distortion, dtype=np.float64)
+
+            # Pass calibration to ArUco detector
+            if self.aruco_detector:
+                self.aruco_detector.set_camera_calibration(camera_matrix, dist_coeffs)
+                Logger.info(f"OAKCamera: Loaded factory calibration for {width}x{height}")
+                Logger.info(f"OAKCamera: fx={intrinsics[0][0]:.2f}, fy={intrinsics[1][1]:.2f}, cx={intrinsics[0][2]:.2f}, cy={intrinsics[1][2]:.2f}")
+
+                # Enable pose estimation for real distance calculation
+                self.aruco_detector.update_config({'estimate_pose': True})
+                Logger.info("OAKCamera: Enabled pose estimation for real distance calculation")
+
+                return True
+            else:
+                Logger.warning("OAKCamera: ArUco detector not available")
+                return False
+
+        except Exception as e:
+            Logger.error(f"OAKCamera: Failed to load camera calibration: {e}")
+            import traceback
+            Logger.error(traceback.format_exc())
+            return False
 
     def start(self):
         """Start camera capture"""
@@ -290,8 +346,10 @@ class OAKCamera:
                         if self.aruco_enabled and self.aruco_detector:
                             try:
                                 processed_frame, detection_results = self.aruco_detector.detect_markers(frame)
+                                # Get full detection info including marker distance
+                                detection_info = self.aruco_detector.get_detection_info()
                                 with self.lock:
-                                    self.aruco_detection_results = detection_results
+                                    self.aruco_detection_results = detection_info
                             except Exception as e:
                                 Logger.warning(f"OAKCamera: ArUco detection error: {e}")
                                 processed_frame = frame.copy()
