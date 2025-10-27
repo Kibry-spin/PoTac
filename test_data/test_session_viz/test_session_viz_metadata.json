@@ -1,0 +1,28 @@
+{
+  "session_name": "test_session_viz",
+  "start_time": "2025-10-24T15:14:34.968676",
+  "end_time": "2025-10-24T15:14:35.071250",
+  "duration": 0.10261750221252441,
+  "sensors": {
+    "oak_camera": {
+      "sensor_id": "oak_camera",
+      "sensor_name": "OAK_Camera",
+      "fps": 30,
+      "resolution": [
+        640,
+        480
+      ],
+      "video_file": "OAK_Camera_test_session_viz.mp4"
+    }
+  },
+  "aruco": {
+    "enabled": true,
+    "marker_ids": [
+      0,
+      1
+    ],
+    "marker_size": 0.015,
+    "calibrated": true,
+    "dictionary": "DICT_4X4_250"
+  }
+}

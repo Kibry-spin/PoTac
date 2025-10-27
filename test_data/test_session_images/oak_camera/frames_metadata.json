@@ -1,0 +1,309 @@
+{
+  "sensor_id": "oak_camera",
+  "total_frames": 50,
+  "dropped_frames": 0,
+  "fps": 30,
+  "image_format": "jpg",
+  "frames": [
+    {
+      "frame_num": 0,
+      "filename": "frame_000000.jpg",
+      "timestamp": 0.0,
+      "frame_seq_num": 0
+    },
+    {
+      "frame_num": 1,
+      "filename": "frame_000001.jpg",
+      "timestamp": 0.03333333333333333,
+      "frame_seq_num": 1
+    },
+    {
+      "frame_num": 2,
+      "filename": "frame_000002.jpg",
+      "timestamp": 0.06666666666666667,
+      "frame_seq_num": 2
+    },
+    {
+      "frame_num": 3,
+      "filename": "frame_000003.jpg",
+      "timestamp": 0.1,
+      "frame_seq_num": 3
+    },
+    {
+      "frame_num": 4,
+      "filename": "frame_000004.jpg",
+      "timestamp": 0.13333333333333333,
+      "frame_seq_num": 4
+    },
+    {
+      "frame_num": 5,
+      "filename": "frame_000005.jpg",
+      "timestamp": 0.16666666666666666,
+      "frame_seq_num": 5
+    },
+    {
+      "frame_num": 6,
+      "filename": "frame_000006.jpg",
+      "timestamp": 0.2,
+      "frame_seq_num": 6
+    },
+    {
+      "frame_num": 7,
+      "filename": "frame_000007.jpg",
+      "timestamp": 0.23333333333333334,
+      "frame_seq_num": 7
+    },
+    {
+      "frame_num": 8,
+      "filename": "frame_000008.jpg",
+      "timestamp": 0.26666666666666666,
+      "frame_seq_num": 8
+    },
+    {
+      "frame_num": 9,
+      "filename": "frame_000009.jpg",
+      "timestamp": 0.3,
+      "frame_seq_num": 9
+    },
+    {
+      "frame_num": 10,
+      "filename": "frame_000010.jpg",
+      "timestamp": 0.3333333333333333,
+      "frame_seq_num": 10
+    },
+    {
+      "frame_num": 11,
+      "filename": "frame_000011.jpg",
+      "timestamp": 0.36666666666666664,
+      "frame_seq_num": 11
+    },
+    {
+      "frame_num": 12,
+      "filename": "frame_000012.jpg",
+      "timestamp": 0.4,
+      "frame_seq_num": 12
+    },
+    {
+      "frame_num": 13,
+      "filename": "frame_000013.jpg",
+      "timestamp": 0.43333333333333335,
+      "frame_seq_num": 13
+    },
+    {
+      "frame_num": 14,
+      "filename": "frame_000014.jpg",
+      "timestamp": 0.4666666666666667,
+      "frame_seq_num": 14
+    },
+    {
+      "frame_num": 15,
+      "filename": "frame_000015.jpg",
+      "timestamp": 0.5,
+      "frame_seq_num": 15
+    },
+    {
+      "frame_num": 16,
+      "filename": "frame_000016.jpg",
+      "timestamp": 0.5333333333333333,
+      "frame_seq_num": 16
+    },
+    {
+      "frame_num": 17,
+      "filename": "frame_000017.jpg",
+      "timestamp": 0.5666666666666667,
+      "frame_seq_num": 17
+    },
+    {
+      "frame_num": 18,
+      "filename": "frame_000018.jpg",
+      "timestamp": 0.6,
+      "frame_seq_num": 18
+    },
+    {
+      "frame_num": 19,
+      "filename": "frame_000019.jpg",
+      "timestamp": 0.6333333333333333,
+      "frame_seq_num": 19
+    },
+    {
+      "frame_num": 20,
+      "filename": "frame_000020.jpg",
+      "timestamp": 0.6666666666666666,
+      "frame_seq_num": 20
+    },
+    {
+      "frame_num": 21,
+      "filename": "frame_000021.jpg",
+      "timestamp": 0.7,
+      "frame_seq_num": 21
+    },
+    {
+      "frame_num": 22,
+      "filename": "frame_000022.jpg",
+      "timestamp": 0.7333333333333333,
+      "frame_seq_num": 22
+    },
+    {
+      "frame_num": 23,
+      "filename": "frame_000023.jpg",
+      "timestamp": 0.7666666666666667,
+      "frame_seq_num": 23
+    },
+    {
+      "frame_num": 24,
+      "filename": "frame_000024.jpg",
+      "timestamp": 0.8,
+      "frame_seq_num": 24
+    },
+    {
+      "frame_num": 25,
+      "filename": "frame_000025.jpg",
+      "timestamp": 0.8333333333333334,
+      "frame_seq_num": 25
+    },
+    {
+      "frame_num": 26,
+      "filename": "frame_000026.jpg",
+      "timestamp": 0.8666666666666667,
+      "frame_seq_num": 26
+    },
+    {
+      "frame_num": 27,
+      "filename": "frame_000027.jpg",
+      "timestamp": 0.9,
+      "frame_seq_num": 27
+    },
+    {
+      "frame_num": 28,
+      "filename": "frame_000028.jpg",
+      "timestamp": 0.9333333333333333,
+      "frame_seq_num": 28
+    },
+    {
+      "frame_num": 29,
+      "filename": "frame_000029.jpg",
+      "timestamp": 0.9666666666666667,
+      "frame_seq_num": 29
+    },
+    {
+      "frame_num": 30,
+      "filename": "frame_000030.jpg",
+      "timestamp": 1.0,
+      "frame_seq_num": 30
+    },
+    {
+      "frame_num": 31,
+      "filename": "frame_000031.jpg",
+      "timestamp": 1.0333333333333334,
+      "frame_seq_num": 31
+    },
+    {
+      "frame_num": 32,
+      "filename": "frame_000032.jpg",
+      "timestamp": 1.0666666666666667,
+      "frame_seq_num": 32
+    },
+    {
+      "frame_num": 33,
+      "filename": "frame_000033.jpg",
+      "timestamp": 1.1,
+      "frame_seq_num": 33
+    },
+    {
+      "frame_num": 34,
+      "filename": "frame_000034.jpg",
+      "timestamp": 1.1333333333333333,
+      "frame_seq_num": 34
+    },
+    {
+      "frame_num": 35,
+      "filename": "frame_000035.jpg",
+      "timestamp": 1.1666666666666667,
+      "frame_seq_num": 35
+    },
+    {
+      "frame_num": 36,
+      "filename": "frame_000036.jpg",
+      "timestamp": 1.2,
+      "frame_seq_num": 36
+    },
+    {
+      "frame_num": 37,
+      "filename": "frame_000037.jpg",
+      "timestamp": 1.2333333333333334,
+      "frame_seq_num": 37
+    },
+    {
+      "frame_num": 38,
+      "filename": "frame_000038.jpg",
+      "timestamp": 1.2666666666666666,
+      "frame_seq_num": 38
+    },
+    {
+      "frame_num": 39,
+      "filename": "frame_000039.jpg",
+      "timestamp": 1.3,
+      "frame_seq_num": 39
+    },
+    {
+      "frame_num": 40,
+      "filename": "frame_000040.jpg",
+      "timestamp": 1.3333333333333333,
+      "frame_seq_num": 40
+    },
+    {
+      "frame_num": 41,
+      "filename": "frame_000041.jpg",
+      "timestamp": 1.3666666666666667,
+      "frame_seq_num": 41
+    },
+    {
+      "frame_num": 42,
+      "filename": "frame_000042.jpg",
+      "timestamp": 1.4,
+      "frame_seq_num": 42
+    },
+    {
+      "frame_num": 43,
+      "filename": "frame_000043.jpg",
+      "timestamp": 1.4333333333333333,
+      "frame_seq_num": 43
+    },
+    {
+      "frame_num": 44,
+      "filename": "frame_000044.jpg",
+      "timestamp": 1.4666666666666666,
+      "frame_seq_num": 44
+    },
+    {
+      "frame_num": 45,
+      "filename": "frame_000045.jpg",
+      "timestamp": 1.5,
+      "frame_seq_num": 45
+    },
+    {
+      "frame_num": 46,
+      "filename": "frame_000046.jpg",
+      "timestamp": 1.5333333333333334,
+      "frame_seq_num": 46
+    },
+    {
+      "frame_num": 47,
+      "filename": "frame_000047.jpg",
+      "timestamp": 1.5666666666666667,
+      "frame_seq_num": 47
+    },
+    {
+      "frame_num": 48,
+      "filename": "frame_000048.jpg",
+      "timestamp": 1.6,
+      "frame_seq_num": 48
+    },
+    {
+      "frame_num": 49,
+      "filename": "frame_000049.jpg",
+      "timestamp": 1.6333333333333333,
+      "frame_seq_num": 49
+    }
+  ]
+}
