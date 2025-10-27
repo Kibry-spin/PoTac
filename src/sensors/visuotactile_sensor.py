@@ -229,7 +229,15 @@ class VisuotactileSensor:
             return frame
 
     def get_frame(self):
-        """Get latest frame (thread-safe)"""
+        """Get latest frame (thread-safe) - converted to RGB for display"""
+        with self.frame_lock:
+            if self.current_frame is not None:
+                # Convert BGR to RGB for Kivy display
+                return cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            return None
+
+    def get_frame_bgr(self):
+        """Get latest frame in BGR format (thread-safe) - for recording"""
         with self.frame_lock:
             if self.current_frame is not None:
                 return self.current_frame.copy()

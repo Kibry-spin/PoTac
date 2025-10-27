@@ -729,8 +729,21 @@ class MainWindow(BoxLayout):
             self.status_label.color = (1, 0, 0, 1)
 
     def _merge_videos_background(self, session_dir):
-        """Merge videos in background thread"""
+        """Merge videos in background thread (only for video format sessions)"""
         try:
+            session_path = Path(session_dir)
+
+            # Check if this session has video files or image sequences
+            video_files = list(session_path.glob("*.mp4"))
+            video_files = [f for f in video_files if 'merged' not in f.name.lower()]
+
+            if not video_files:
+                # This is an image sequence format session, no need to merge videos
+                Logger.info(f"MainWindow: Session uses image sequence format, skipping video merge")
+                self.status_label.text = f'Status: Recording saved! {session_path.name}'
+                self.status_label.color = (0, 1, 0, 1)
+                return
+
             Logger.info(f"MainWindow: Starting video merge for session: {session_dir}")
 
             def progress_callback(progress):

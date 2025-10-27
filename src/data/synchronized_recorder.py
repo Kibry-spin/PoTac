@@ -1,5 +1,6 @@
 """
 Synchronized Recorder - High-performance multi-sensor synchronized recording
+Saves each frame as individual image files with timestamp metadata
 """
 
 import cv2
@@ -7,6 +8,7 @@ import numpy as np
 import threading
 import queue
 import time
+import json
 from pathlib import Path
 from datetime import datetime
 from kivy.logger import Logger
@@ -14,22 +16,30 @@ from src.data.pkl_saver import TimestampAlignedDataSaver
 
 
 class SensorRecorder:
-    """Individual sensor recorder with thread-safe queue"""
+    """Individual sensor recorder - saves frames as numbered image files"""
 
-    def __init__(self, sensor_id, output_path, fps=30, resolution=None, sensor_object=None):
+    def __init__(self, sensor_id, output_dir, fps=30, resolution=None, sensor_object=None, image_format='jpg'):
         self.sensor_id = sensor_id
-        self.output_path = Path(output_path)
+        self.output_dir = Path(output_dir)
         self.fps = fps
         self.resolution = resolution
         self.sensor_object = sensor_object  # Reference to actual sensor for direct frame access
+        self.image_format = image_format  # 'jpg' or 'png'
 
-        self.writer = None
+        # Create sensor-specific directory
+        self.sensor_dir = self.output_dir / self.sensor_id
+        self.sensor_dir.mkdir(parents=True, exist_ok=True)
+
         self.frame_queue = queue.Queue(maxsize=300)  # Buffer up to 10 seconds
         self.recording = False
         self.writer_thread = None
         self.capture_thread = None  # Thread to capture frames from sensor
         self.frames_written = 0
         self.dropped_frames = 0
+
+        # Frame metadata: {frame_num: {'timestamp': float, 'filename': str, 'frame_seq_num': int}}
+        self.frame_metadata = []
+        self.metadata_lock = threading.Lock()
 
     def start(self):
         """Start recording"""
@@ -64,22 +74,37 @@ class SensorRecorder:
 
         while self.recording:
             try:
+                # Get current timestamp
+                timestamp = time.time()
+
                 # Get frame from sensor in BGR format
                 frame = None
+                frame_seq_num = -1
 
                 if hasattr(self.sensor_object, 'get_frame_bgr'):
                     # OAK camera - get BGR frame for recording
                     frame = self.sensor_object.get_frame_bgr()
+                    # Try to get sequence number
+                    if hasattr(self.sensor_object, 'current_frame_seq_num'):
+                        frame_seq_num = self.sensor_object.current_frame_seq_num
                 elif hasattr(self.sensor_object, 'get_frame'):
                     # Visuotactile sensor - already BGR from OpenCV
                     frame = self.sensor_object.get_frame()
 
                 if frame is not None:
-                    # Add frame to queue (non-blocking)
+                    # Package frame with metadata
+                    frame_data = {
+                        'frame': frame.copy(),
+                        'timestamp': timestamp,
+                        'frame_seq_num': frame_seq_num
+                    }
+
+                    # Add to queue (non-blocking)
                     try:
-                        self.frame_queue.put_nowait(frame.copy())
+                        self.frame_queue.put_nowait(frame_data)
                     except queue.Full:
                         self.dropped_frames += 1
+                        Logger.warning(f"SensorRecorder: Dropped frame for '{self.sensor_id}' (queue full)")
 
                 # Maintain target frame rate
                 current_time = time.time()
@@ -96,52 +121,69 @@ class SensorRecorder:
         Logger.info(f"SensorRecorder: Capture loop ended for '{self.sensor_id}'")
 
     def _writer_loop(self):
-        """Writer thread loop - processes frames from queue"""
+        """Writer thread loop - saves frames as numbered image files"""
         Logger.info(f"SensorRecorder: Writer loop started for '{self.sensor_id}'")
+
+        # JPEG quality settings
+        jpeg_quality = 95  # High quality
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
+
+        # PNG compression settings (if using PNG)
+        png_compress = 3  # Compression level 0-9
+        png_params = [cv2.IMWRITE_PNG_COMPRESSION, png_compress]
 
         while self.recording or not self.frame_queue.empty():
             try:
-                # Get frame with timeout
-                frame = self.frame_queue.get(timeout=1.0)
+                # Get frame data with timeout
+                frame_data = self.frame_queue.get(timeout=1.0)
 
-                # Initialize writer on first frame
-                if self.writer is None:
-                    height, width = frame.shape[:2]
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                frame = frame_data['frame']
+                timestamp = frame_data['timestamp']
+                frame_seq_num = frame_data['frame_seq_num']
 
-                    self.writer = cv2.VideoWriter(
-                        str(self.output_path),
-                        fourcc,
-                        self.fps,
-                        (width, height)
-                    )
+                # Generate filename with zero-padding (supports up to 999,999 frames)
+                filename = f"frame_{self.frames_written:06d}.{self.image_format}"
+                filepath = self.sensor_dir / filename
 
-                    if not self.writer.isOpened():
-                        Logger.error(f"SensorRecorder: Failed to create writer for '{self.sensor_id}'")
-                        self.recording = False
-                        break
+                # Save frame as image
+                if self.image_format == 'jpg':
+                    success = cv2.imwrite(str(filepath), frame, encode_params)
+                elif self.image_format == 'png':
+                    success = cv2.imwrite(str(filepath), frame, png_params)
+                else:
+                    success = cv2.imwrite(str(filepath), frame)
 
-                    Logger.info(f"SensorRecorder: Writer initialized - {width}x{height} @ {self.fps}fps")
+                if success:
+                    # Record metadata
+                    with self.metadata_lock:
+                        self.frame_metadata.append({
+                            'frame_num': self.frames_written,
+                            'filename': filename,
+                            'timestamp': timestamp,
+                            'frame_seq_num': frame_seq_num
+                        })
 
-                # Write frame
-                self.writer.write(frame)
-                self.frames_written += 1
+                    self.frames_written += 1
+
+                    # Log progress every 100 frames
+                    if self.frames_written % 100 == 0:
+                        Logger.debug(f"SensorRecorder: '{self.sensor_id}' saved {self.frames_written} frames")
+                else:
+                    Logger.error(f"SensorRecorder: Failed to save frame {filename}")
+
+                self.frame_queue.task_done()
 
             except queue.Empty:
                 continue
             except Exception as e:
                 Logger.error(f"SensorRecorder: Writer error - {e}")
-                break
+                import traceback
+                traceback.print_exc()
 
-        # Cleanup
-        if self.writer:
-            self.writer.release()
-            self.writer = None
-
-        Logger.info(f"SensorRecorder: Writer loop ended - {self.frames_written} frames written, {self.dropped_frames} dropped")
+        Logger.info(f"SensorRecorder: Writer loop ended for '{self.sensor_id}' - Total frames: {self.frames_written}")
 
     def stop(self):
-        """Stop recording"""
+        """Stop recording and save frame metadata"""
         if not self.recording:
             return
 
@@ -155,6 +197,32 @@ class SensorRecorder:
         if self.writer_thread and self.writer_thread.is_alive():
             self.writer_thread.join(timeout=5.0)
 
+        # Save frame metadata to JSON file
+        self._save_frame_metadata()
+
+        Logger.info(f"SensorRecorder: Stopped '{self.sensor_id}' - {self.frames_written} frames written, {self.dropped_frames} dropped")
+
+    def _save_frame_metadata(self):
+        """Save frame metadata (timestamps, filenames) to JSON"""
+        metadata_file = self.sensor_dir / "frames_metadata.json"
+
+        with self.metadata_lock:
+            metadata = {
+                'sensor_id': self.sensor_id,
+                'total_frames': self.frames_written,
+                'dropped_frames': self.dropped_frames,
+                'fps': self.fps,
+                'image_format': self.image_format,
+                'frames': self.frame_metadata
+            }
+
+        try:
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            Logger.info(f"SensorRecorder: Saved metadata for '{self.sensor_id}' to {metadata_file}")
+        except Exception as e:
+            Logger.error(f"SensorRecorder: Failed to save metadata - {e}")
+
     def get_stats(self):
         """Get recording statistics"""
         return {
@@ -167,6 +235,11 @@ class SensorRecorder:
     def get_frame_count(self):
         """Get current frame count (frames written so far)"""
         return self.frames_written
+
+    def get_frame_metadata(self):
+        """Get list of frame metadata"""
+        with self.metadata_lock:
+            return self.frame_metadata.copy()
 
 
 class SynchronizedRecorder:
@@ -201,30 +274,28 @@ class SynchronizedRecorder:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         Logger.info(f"SynchronizedRecorder: Session directory: {self.session_dir}")
 
-    def add_sensor(self, sensor_id, sensor_name, sensor_object, fps=30):
+    def add_sensor(self, sensor_id, sensor_name, sensor_object, fps=30, image_format='jpg'):
         """
         Add a sensor to recording
 
         Args:
-            sensor_id: Sensor identifier
+            sensor_id: Sensor identifier (used as directory name)
             sensor_name: Sensor display name
             sensor_object: The actual sensor object for direct frame access
             fps: Recording frame rate
+            image_format: Image format ('jpg' or 'png')
         """
         if sensor_id in self.recorders:
             Logger.warning(f"SynchronizedRecorder: Sensor '{sensor_id}' already added")
             return False
-
-        # Create output filename
-        filename = f"{sensor_name}_{self.session_name}.mp4"
-        output_path = self.session_dir / filename
 
         # Collect sensor metadata
         sensor_metadata = {
             'sensor_id': sensor_id,
             'sensor_name': sensor_name,
             'fps': fps,
-            'video_file': filename
+            'image_format': image_format,
+            'frames_dir': sensor_id  # Directory name for frames
         }
 
         # Get sensor-specific metadata
@@ -241,11 +312,17 @@ class SynchronizedRecorder:
         # Add metadata to PKL saver
         self.pkl_saver.add_sensor_metadata(sensor_id, sensor_metadata)
 
-        # Create recorder with sensor object
-        recorder = SensorRecorder(sensor_id, output_path, fps, sensor_object=sensor_object)
+        # Create recorder with sensor object (saves to session_dir/sensor_id/)
+        recorder = SensorRecorder(
+            sensor_id=sensor_id,
+            output_dir=self.session_dir,
+            fps=fps,
+            sensor_object=sensor_object,
+            image_format=image_format
+        )
         self.recorders[sensor_id] = recorder
 
-        Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' -> {filename}")
+        Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' (format: {image_format})")
         return True
 
     def start_recording(self):

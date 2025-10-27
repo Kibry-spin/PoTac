@@ -90,7 +90,8 @@ class OAKCamera:
         self.device = None
         self.camera_thread = None
         self.is_running = False
-        self.current_frame = None
+        self.current_frame = None  # Processed frame with ArUco annotations (for GUI display)
+        self.raw_frame = None  # Raw original frame without annotations (for recording)
         self.current_frame_seq_num = 0  # Frame sequence number from DepthAI
 
         # Video recording
@@ -360,9 +361,10 @@ class OAKCamera:
                                 Logger.warning(f"OAKCamera: ArUco detection error: {e}")
                                 processed_frame = frame.copy()
 
-                        # Save processed frame for display
+                        # Save frames with lock
                         with self.lock:
-                            self.current_frame = processed_frame
+                            self.raw_frame = frame.copy()  # Save raw frame for recording
+                            self.current_frame = processed_frame  # Save processed frame for display
                             self.current_frame_seq_num = frame_seq_num
 
                         # Recording processing with frame skipping for stability
@@ -416,10 +418,10 @@ class OAKCamera:
             return None
 
     def get_frame_bgr(self):
-        """Get the latest BGR frame for recording (OpenCV format)"""
+        """Get the latest raw BGR frame for recording (OpenCV format, without ArUco annotations)"""
         with self.lock:
-            if self.current_frame is not None:
-                return self.current_frame.copy()
+            if self.raw_frame is not None:
+                return self.raw_frame.copy()
             return None
 
     def get_frames(self):
