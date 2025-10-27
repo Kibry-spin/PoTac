@@ -187,15 +187,40 @@ class SensorRecorder:
         if not self.recording:
             return
 
+        Logger.info(f"SensorRecorder: Stopping '{self.sensor_id}'...")
         self.recording = False
 
         # Wait for capture thread to finish
         if self.capture_thread and self.capture_thread.is_alive():
             self.capture_thread.join(timeout=2.0)
+            if self.capture_thread.is_alive():
+                Logger.warning(f"SensorRecorder: Capture thread for '{self.sensor_id}' did not finish in time")
 
-        # Wait for queue to empty and writer thread to finish
+        # Wait for queue to be fully processed
+        # First, log the queue size
+        queue_size = self.frame_queue.qsize()
+        if queue_size > 0:
+            Logger.info(f"SensorRecorder: Waiting for {queue_size} frames in queue to be processed...")
+
+        # Wait for queue to empty (with progress logging)
+        wait_start = time.time()
+        while not self.frame_queue.empty():
+            current_size = self.frame_queue.qsize()
+            elapsed = time.time() - wait_start
+            if elapsed > 1.0 and int(elapsed) % 5 == 0:  # Log every 5 seconds
+                Logger.info(f"SensorRecorder: Still processing... {current_size} frames remaining")
+            time.sleep(0.1)
+
+            # Safety timeout after 60 seconds
+            if elapsed > 60.0:
+                Logger.warning(f"SensorRecorder: Queue processing timeout after 60s, {current_size} frames may be lost")
+                break
+
+        # Now wait for writer thread to finish
         if self.writer_thread and self.writer_thread.is_alive():
-            self.writer_thread.join(timeout=5.0)
+            self.writer_thread.join(timeout=10.0)
+            if self.writer_thread.is_alive():
+                Logger.warning(f"SensorRecorder: Writer thread for '{self.sensor_id}' did not finish in time")
 
         # Save frame metadata to JSON file
         self._save_frame_metadata()
