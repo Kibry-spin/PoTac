@@ -61,7 +61,7 @@ class VisuotactileSensor:
     def _load_default_config(self):
         """Load default configuration"""
         return {
-            'resolution': (640, 480),  # Default resolution
+            'resolution': (320, 240),  # 降低采集分辨率以节省USB带宽（2个传感器同时使用）
             'fps': 30,
             'exposure': -1,  # Auto exposure
             'brightness': 128,

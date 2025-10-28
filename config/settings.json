@@ -101,6 +101,11 @@
   },
   "visuotactile_sensors": {
     "enabled": false,
+    "default_config": {
+      "resolution": [320, 240],
+      "fps": 30,
+      "comment": "降低分辨率以节省USB带宽，避免多传感器同时使用时画面滚动"
+    },
     "sensors": []
   }
 }

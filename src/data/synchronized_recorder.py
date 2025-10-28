@@ -141,6 +141,10 @@ class SensorRecorder:
                 timestamp = frame_data['timestamp']
                 frame_seq_num = frame_data['frame_seq_num']
 
+                # Resize frame if resolution is specified
+                if self.resolution is not None:
+                    frame = cv2.resize(frame, self.resolution)
+
                 # Generate filename with zero-padding (supports up to 999,999 frames)
                 filename = f"frame_{self.frames_written:06d}.{self.image_format}"
                 filepath = self.sensor_dir / filename
@@ -299,7 +303,7 @@ class SynchronizedRecorder:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         Logger.info(f"SynchronizedRecorder: Session directory: {self.session_dir}")
 
-    def add_sensor(self, sensor_id, sensor_name, sensor_object, fps=30, image_format='jpg'):
+    def add_sensor(self, sensor_id, sensor_name, sensor_object, fps=30, image_format='jpg', save_resolution=None):
         """
         Add a sensor to recording
 
@@ -309,6 +313,7 @@ class SynchronizedRecorder:
             sensor_object: The actual sensor object for direct frame access
             fps: Recording frame rate
             image_format: Image format ('jpg' or 'png')
+            save_resolution: Optional (width, height) for saving. If None, saves at original resolution.
         """
         if sensor_id in self.recorders:
             Logger.warning(f"SynchronizedRecorder: Sensor '{sensor_id}' already added")
@@ -342,12 +347,13 @@ class SynchronizedRecorder:
             sensor_id=sensor_id,
             output_dir=self.session_dir,
             fps=fps,
+            resolution=save_resolution,  # Save resolution (will resize if specified)
             sensor_object=sensor_object,
             image_format=image_format
         )
         self.recorders[sensor_id] = recorder
 
-        Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' (format: {image_format})")
+        Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' (format: {image_format}, save_resolution: {save_resolution})")
         return True
 
     def start_recording(self):

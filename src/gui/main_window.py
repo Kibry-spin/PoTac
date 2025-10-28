@@ -632,9 +632,16 @@ class MainWindow(BoxLayout):
                 sensor = self.sensor_manager.get_visuotactile_sensor(sensor_id)
                 if sensor and sensor.running:
                     # Pass the actual sensor object for direct frame access
-                    self.sync_recorder.add_sensor(sensor_id, sensor.name, sensor, fps=30)
+                    # Save at 320x240 resolution for visuotactile sensors
+                    self.sync_recorder.add_sensor(
+                        sensor_id,
+                        sensor.name,
+                        sensor,
+                        fps=30,
+                        save_resolution=(320, 240)  # Resize to 320x240 for saving
+                    )
                     vt_count += 1
-                    Logger.info(f"MainWindow: Added '{sensor.name}' to recording")
+                    Logger.info(f"MainWindow: Added '{sensor.name}' to recording (save at 320x240)")
 
             total_sensors = (1 if oak_added else 0) + vt_count
 
