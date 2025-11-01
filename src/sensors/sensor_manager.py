@@ -8,10 +8,11 @@ from kivy.logger import Logger
 
 from .oak_camera import OAKCamera
 from .visuotactile_sensor import VisuotactileSensorManager
+from .tac3d_sensor import Tac3DSensorManager
 
 
 class SensorManager:
-    """Manages OAK camera and visuotactile sensors"""
+    """Manages OAK camera, visuotactile sensors, and Tac3D sensors"""
 
     def __init__(self):
         self.lock = Lock()
@@ -25,11 +26,14 @@ class SensorManager:
         # Initialize visuotactile sensor manager
         self.vt_sensor_manager = VisuotactileSensorManager(config_file=config_path)
 
+        # Initialize Tac3D sensor manager
+        self.tac3d_sensor_manager = Tac3DSensorManager(config_file=config_path)
+
         # Data storage
         self.latest_data = {}
 
     def initialize(self):
-        """Initialize camera and visuotactile sensors"""
+        """Initialize camera, visuotactile sensors, and Tac3D sensors"""
         try:
             Logger.info("SensorManager: Initializing sensors...")
 
@@ -47,7 +51,14 @@ class SensorManager:
             else:
                 Logger.warning("SensorManager: Visuotactile sensors initialization failed")
 
-            self.initialized = oak_success or vt_success
+            # Initialize Tac3D sensors
+            tac3d_success = self.tac3d_sensor_manager.initialize_all()
+            if tac3d_success:
+                Logger.info("SensorManager: Tac3D sensors initialized successfully")
+            else:
+                Logger.warning("SensorManager: Tac3D sensors initialization failed")
+
+            self.initialized = oak_success or vt_success or tac3d_success
 
         except Exception as e:
             Logger.error(f"SensorManager: Error initializing sensors: {e}")
@@ -67,7 +78,7 @@ class SensorManager:
             return None
 
     def get_sensor_data(self):
-        """Get sensor data including visuotactile sensors"""
+        """Get sensor data including visuotactile and Tac3D sensors"""
         data = {}
 
         # Get visuotactile sensor frames
@@ -77,6 +88,14 @@ class SensorManager:
                 data['visuotactile'] = vt_frames
         except Exception as e:
             Logger.warning(f"SensorManager: Error getting visuotactile data: {e}")
+
+        # Get Tac3D sensor data
+        try:
+            tac3d_frames = self.tac3d_sensor_manager.get_all_frames()
+            if tac3d_frames:
+                data['tac3d'] = tac3d_frames
+        except Exception as e:
+            Logger.warning(f"SensorManager: Error getting Tac3D data: {e}")
 
         return data
 
@@ -121,6 +140,10 @@ class SensorManager:
             self.vt_sensor_manager.stop_all()
             Logger.info("SensorManager: Stopped visuotactile sensors")
 
+            # Stop Tac3D sensors
+            self.tac3d_sensor_manager.stop_all()
+            Logger.info("SensorManager: Stopped Tac3D sensors")
+
             self.initialized = False
             Logger.info("SensorManager: All sensors stopped")
 
@@ -159,7 +182,8 @@ class SensorManager:
             'initialized': self.initialized,
             'recording': self.recording,
             'camera': {},
-            'visuotactile': {}
+            'visuotactile': {},
+            'tac3d': {}
         }
 
         try:
@@ -171,6 +195,9 @@ class SensorManager:
 
             # Visuotactile sensors status
             status['visuotactile'] = self.vt_sensor_manager.get_all_status()
+
+            # Tac3D sensors status
+            status['tac3d'] = self.tac3d_sensor_manager.get_all_status()
 
         except Exception as e:
             status['error'] = str(e)
@@ -265,6 +292,92 @@ class SensorManager:
     def get_connected_visuotactile_sensors(self):
         """Get list of connected visuotactile sensor IDs"""
         return list(self.vt_sensor_manager.sensors.keys())
+
+    # Tac3D sensor management methods
+    def add_tac3d_sensor(self, sensor_id, port, ip=None, name=None, config=None):
+        """Add a Tac3D sensor"""
+        return self.tac3d_sensor_manager.add_sensor(sensor_id, port, ip, name, config)
+
+    def remove_tac3d_sensor(self, sensor_id):
+        """Remove a Tac3D sensor"""
+        return self.tac3d_sensor_manager.remove_sensor(sensor_id)
+
+    def get_tac3d_sensor(self, sensor_id):
+        """Get Tac3D sensor by ID"""
+        return self.tac3d_sensor_manager.get_sensor(sensor_id)
+
+    def start_tac3d_sensors(self):
+        """Start all Tac3D sensors"""
+        return self.tac3d_sensor_manager.start_all()
+
+    def connect_tac3d_sensor(self, sensor_id, port, ip=None, name=None):
+        """
+        Connect and start a Tac3D sensor
+
+        Args:
+            sensor_id: Unique sensor identifier
+            port: UDP port number
+            ip: IP address of remote sensor (None for localhost)
+            name: Sensor display name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Add sensor
+            if not self.add_tac3d_sensor(sensor_id, port, ip, name):
+                return False
+
+            # Get the sensor
+            sensor = self.get_tac3d_sensor(sensor_id)
+            if not sensor:
+                return False
+
+            # Initialize and start
+            if not sensor.initialize():
+                Logger.error(f"SensorManager: Failed to initialize Tac3D sensor '{sensor_id}'")
+                self.remove_tac3d_sensor(sensor_id)
+                return False
+
+            if not sensor.start():
+                Logger.error(f"SensorManager: Failed to start Tac3D sensor '{sensor_id}'")
+                self.remove_tac3d_sensor(sensor_id)
+                return False
+
+            Logger.info(f"SensorManager: Tac3D sensor '{sensor_id}' connected and running")
+            return True
+
+        except Exception as e:
+            Logger.error(f"SensorManager: Error connecting Tac3D sensor '{sensor_id}': {e}")
+            return False
+
+    def disconnect_tac3d_sensor(self, sensor_id):
+        """Disconnect a Tac3D sensor"""
+        try:
+            sensor = self.get_tac3d_sensor(sensor_id)
+            if sensor:
+                sensor.stop()
+
+            return self.remove_tac3d_sensor(sensor_id)
+
+        except Exception as e:
+            Logger.error(f"SensorManager: Error disconnecting Tac3D sensor '{sensor_id}': {e}")
+            return False
+
+    def calibrate_tac3d_sensor(self, sensor_id):
+        """Calibrate a Tac3D sensor"""
+        try:
+            sensor = self.get_tac3d_sensor(sensor_id)
+            if sensor:
+                return sensor.calibrate()
+            return False
+        except Exception as e:
+            Logger.error(f"SensorManager: Error calibrating Tac3D sensor '{sensor_id}': {e}")
+            return False
+
+    def get_connected_tac3d_sensors(self):
+        """Get list of connected Tac3D sensor IDs"""
+        return list(self.tac3d_sensor_manager.sensors.keys())
 
     def get_visuotactile_sensor_count(self):
         """Get number of connected visuotactile sensors"""

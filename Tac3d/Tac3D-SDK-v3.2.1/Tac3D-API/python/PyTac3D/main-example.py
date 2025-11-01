@@ -50,7 +50,6 @@ def Tac3DRecvCallback(frame, param):
     # get the timestamp
     sendTimestamp = frame['sendTimestamp']
     recvTimestamp = frame['recvTimestamp']
-
     # 使用frame.get函数通过数据名称"3D_Positions"获得numpy.array类型的三维形貌数据
     # 矩阵的3列分别为x,y,z方向的分量
     # 矩阵的每行对应一个测量点
@@ -66,7 +65,7 @@ def Tac3DRecvCallback(frame, param):
     # The three columns of the matrix are the components in the x, y, and z directions, respectively
     # Each row of the matrix corresponds to a sensing point
     D = frame.get('3D_Displacements')
-
+    print(D)
     # 使用frame.get函数通过数据名称"3D_Forces"获得numpy.array类型的三维分布力数据
     # 矩阵的3列分别为x,y,z方向的分量
     # 矩阵的每行对应一个测量点
@@ -80,7 +79,7 @@ def Tac3DRecvCallback(frame, param):
     # Use the frame.get function to obtain the resultant force in the numpy.array type through the data name "3D_ResultantForce"
     # The three columns of the matrix are the components in the x, y, and z directions, respectively
     Fr = frame.get('3D_ResultantForce')
-
+    print(Fr)
     # 使用frame.get函数通过数据名称"3D_ResultantMoment"获得numpy.array类型的三维合力的数据指针
     # 矩阵的3列分别为x,y,z方向的分量
     # Use the frame.get function to obtain the resultant moment in the numpy.array type through the data name "3D_ResultantMoment"
@@ -114,7 +113,6 @@ time.sleep(5)
 frame = tac3d.getFrame()
 if not frame is None:
     print(frame['SN'])
-
 #5s
 time.sleep(5)
 

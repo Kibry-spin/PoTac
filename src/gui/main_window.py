@@ -20,6 +20,11 @@ from src.gui.sensor_selector_dialog import SensorSelectorDialog
 from src.data.synchronized_recorder import SynchronizedRecorder
 from src.data.video_merger import merge_session_videos
 from src.data.auto_recorder import DistanceBasedAutoRecorder, AutoRecordingState
+from src.gui.tac3d_gui_extensions import (
+    create_tac3d_control_button,
+    update_tac3d_status_in_control_panel,
+    add_tac3d_to_recording
+)
 
 
 class MainWindow(BoxLayout):
@@ -199,6 +204,14 @@ class MainWindow(BoxLayout):
         self.vt_sensor_status_label = Label(text='VT Sensors: None connected', font_size='12sp', color=(1, 1, 0, 1))
         status_layout.add_widget(self.vt_sensor_status_label)
 
+        # Tac3D sensor status
+        self.tac3d_status_label = Label(
+            text='Tac3D: None connected',
+            font_size='12sp',
+            color=(1, 1, 0, 1)
+        )
+        status_layout.add_widget(self.tac3d_status_label)
+
         panel.add_widget(status_layout)
 
         # Data collection settings
@@ -277,6 +290,10 @@ class MainWindow(BoxLayout):
             background_color=(0, 0.5, 0.8, 1)
         )
         vt_config_button.bind(on_press=self.show_vt_sensor_config)
+
+        # Tac3D Sensor Config
+        tac3d_config_button = create_tac3d_control_button(self)
+        control_bar.add_widget(tac3d_config_button)
         control_bar.add_widget(vt_config_button)
 
         # Settings
@@ -442,6 +459,9 @@ class MainWindow(BoxLayout):
 
             # Update VT sensor status
             self.update_vt_sensor_status()
+
+            # Update Tac3D sensor status
+            update_tac3d_status_in_control_panel(self)
 
         except Exception as e:
             Logger.warning(f"MainWindow: Update error: {e}")
@@ -643,7 +663,11 @@ class MainWindow(BoxLayout):
                     vt_count += 1
                     Logger.info(f"MainWindow: Added '{sensor.name}' to recording (save at 320x240)")
 
-            total_sensors = (1 if oak_added else 0) + vt_count
+
+            # Add all Tac3D sensors
+            tac3d_count = add_tac3d_to_recording(self, self.sync_recorder)
+
+            total_sensors = (1 if oak_added else 0) + vt_count + tac3d_count
 
             if total_sensors == 0:
                 Logger.error("MainWindow: No sensors available for recording")
@@ -909,6 +933,9 @@ class MainWindow(BoxLayout):
 
             # Update status
             self.update_vt_sensor_status()
+
+            # Update Tac3D sensor status
+            update_tac3d_status_in_control_panel(self)
 
             if success_count > 0:
                 self.status_label.text = f'Status: Connected {success_count} VT sensor(s)'

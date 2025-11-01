@@ -30,7 +30,7 @@ class UDP_Manager:
     def start(self):
         if self.inet == 4:
             self.af_inet = socket.AF_INET  # ipv4
-            self.localIp = '127.0.0.1'
+            self.localIp = '192.168,137.210'
         elif self.inet == 6:
             self.af_inet = socket.AF_INET6 # ipv6
             self.localIp = '::1'

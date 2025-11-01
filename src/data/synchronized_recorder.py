@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from kivy.logger import Logger
 from src.data.pkl_saver import TimestampAlignedDataSaver
+from src.data.tac3d_data_recorder import Tac3DDataRecorder
 
 
 class SensorRecorder:
@@ -342,18 +343,32 @@ class SynchronizedRecorder:
         # Add metadata to PKL saver
         self.pkl_saver.add_sensor_metadata(sensor_id, sensor_metadata)
 
-        # Create recorder with sensor object (saves to session_dir/sensor_id/)
-        recorder = SensorRecorder(
-            sensor_id=sensor_id,
-            output_dir=self.session_dir,
-            fps=fps,
-            resolution=save_resolution,  # Save resolution (will resize if specified)
-            sensor_object=sensor_object,
-            image_format=image_format
-        )
-        self.recorders[sensor_id] = recorder
+        # Check sensor type and create appropriate recorder
+        # Detect Tac3D sensor by checking class name
+        sensor_class_name = sensor_object.__class__.__name__
 
-        Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' (format: {image_format}, save_resolution: {save_resolution})")
+        if sensor_class_name == 'Tac3DSensor':
+            # Use specialized Tac3D data recorder
+            recorder = Tac3DDataRecorder(
+                sensor_id=sensor_id,
+                output_dir=self.session_dir,
+                fps=fps,
+                sensor_object=sensor_object
+            )
+            Logger.info(f"SynchronizedRecorder: Added Tac3D sensor '{sensor_id}' (NPZ data format)")
+        else:
+            # Use standard image-based recorder for camera sensors
+            recorder = SensorRecorder(
+                sensor_id=sensor_id,
+                output_dir=self.session_dir,
+                fps=fps,
+                resolution=save_resolution,  # Save resolution (will resize if specified)
+                sensor_object=sensor_object,
+                image_format=image_format
+            )
+            Logger.info(f"SynchronizedRecorder: Added sensor '{sensor_id}' (format: {image_format}, save_resolution: {save_resolution})")
+
+        self.recorders[sensor_id] = recorder
         return True
 
     def start_recording(self):

@@ -1,0 +1,65 @@
+{
+  "comment": "PoTac Multi-modal Data Collection System Configuration with Tac3D Support",
+
+  "oak_camera": {
+    "enabled": true,
+    "mx_id": null,
+    "config": {
+      "rgb_resolution": [1920, 1080],
+      "fps": 30
+    }
+  },
+
+  "visuotactile_sensors": {
+    "enabled": true,
+    "sensors": [
+      {
+        "id": "vt_left",
+        "camera_id": 4,
+        "name": "VT_Left",
+        "config": {
+          "resolution": [320, 240],
+          "fps": 30
+        }
+      },
+      {
+        "id": "vt_right",
+        "camera_id": 6,
+        "name": "VT_Right",
+        "config": {
+          "resolution": [320, 240],
+          "fps": 30
+        }
+      }
+    ]
+  },
+
+  "tac3d_sensors": {
+    "enabled": true,
+    "sensors": [
+      {
+        "id": "tac3d_finger",
+        "port": 9988,
+        "name": "Tac3D_Finger",
+        "config": {
+          "max_queue_size": 5,
+          "auto_calibrate": false,
+          "calibrate_delay": 2.0,
+          "save_all_data": false
+        }
+      }
+    ]
+  },
+
+  "aruco": {
+    "enabled": true,
+    "marker_size_mm": 30.0,
+    "dictionary": "DICT_4X4_100"
+  },
+
+  "recording": {
+    "output_dir": "./data",
+    "image_format": "jpg",
+    "save_aruco_detections": true
+  }
+}

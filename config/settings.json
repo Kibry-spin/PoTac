@@ -21,10 +21,10 @@
   },
   "aruco_optimized": {
     "enabled": true,
-    "dictionary_type": "DICT_4X4_250",
+    "dictionary_type": "DICT_4X4_1000",
     "marker_size": 0.015,
     "left_id": 1,
-    "right_id": 0,
+    "right_id": 809,
     "draw_markers": true,
     "draw_axes": false,
     "estimate_pose": false,
@@ -107,5 +107,29 @@
       "comment": "降低分辨率以节省USB带宽，避免多传感器同时使用时画面滚动"
     },
     "sensors": []
+  },
+  "tac3d_sensors": {
+    "enabled": false,
+    "default_config": {
+      "max_queue_size": 5,
+      "auto_calibrate": false,
+      "calibrate_delay": 2.0,
+      "save_all_data": false,
+      "comment": "Tac3D远程触觉传感器配置"
+    },
+    "sensors": [
+      {
+        "id": "tac3d_1",
+        "port": 9988,
+        "ip": null,
+        "name": "Tac3D_Finger",
+        "enabled": false,
+        "config": {
+          "max_queue_size": 5,
+          "auto_calibrate": false,
+          "save_all_data": false
+        }
+      }
+    ]
   }
 }
