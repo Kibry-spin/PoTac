@@ -30,8 +30,9 @@ except ImportError:
     HAS_TQDM = False
     print("提示: 安装tqdm可获得更好的进度显示 (pip install tqdm)")
 
-# 添加项目路径
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+# 添加项目路径 - 脚本在Tools目录，需要向上一级到项目根目录
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / 'src'))
 
 from vision.aruco_detector_optimized import ArUcoDetectorOptimized
 
@@ -69,9 +70,10 @@ class OfflineArUcoProcessor:
 
         # 初始化ArUco检测器
         if config_file is None:
-            config_file = "config/settings.json"
+            # 使用项目根目录下的配置文件
+            config_file = project_root / "config" / "settings.json"
 
-        self.aruco_detector = ArUcoDetectorOptimized(config_file)
+        self.aruco_detector = ArUcoDetectorOptimized(str(config_file))
 
         # 尝试加载OAK相机标定
         self._load_oak_calibration()

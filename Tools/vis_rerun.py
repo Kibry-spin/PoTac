@@ -312,10 +312,10 @@ def main():
         epilog="""
 示例:
   # 可视化指定session（自动检测是否有ArUco数据）
-  python visualize_with_aruco.py data/session_20251028_143946
+  python vis_rerun.py data/session_20251028_143946
 
   # 可视化最新session
-  python visualize_with_aruco.py
+  python vis_rerun.py
         """
     )
 
@@ -323,10 +323,14 @@ def main():
 
     args = parser.parse_args()
 
+    # 确定项目根目录（脚本在Tools目录，向上一级）
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+
     # 处理session_dir参数
     if args.session_dir is None:
         print("查找最新session...")
-        data_dir = Path("./data")
+        data_dir = project_root / "data"
         if data_dir.exists():
             sessions = sorted(data_dir.glob("session_*"),
                             key=lambda x: x.stat().st_mtime, reverse=True)
@@ -341,6 +345,9 @@ def main():
             sys.exit(1)
     else:
         session_dir = Path(args.session_dir)
+        # 如果是相对路径，从项目根目录解析
+        if not session_dir.is_absolute():
+            session_dir = project_root / session_dir
 
     if not session_dir.exists():
         print(f"错误: Session目录不存在: {session_dir}")
