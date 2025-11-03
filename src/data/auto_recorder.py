@@ -8,6 +8,7 @@ from enum import Enum
 from kivy.logger import Logger
 import json
 from pathlib import Path
+from utils.voice_manager import VoiceManager
 
 
 class AutoRecordingState(Enum):
@@ -53,6 +54,10 @@ class DistanceBasedAutoRecorder:
         self.require_both_markers = self.config['require_both_markers']
         self.min_stable_frames = self.config['min_stable_frames']
 
+        # Voice prompt manager
+        self.voice_enabled = self.config.get('voice_prompts_enabled', True)
+        self.voice_manager = VoiceManager() if self.voice_enabled else None
+
         # State tracking
         self._stable_frame_count = 0
         self._cooldown_start_time = None
@@ -79,7 +84,8 @@ class DistanceBasedAutoRecorder:
             'use_horizontal_distance': True,
             'cooldown_seconds': 2.0,
             'require_both_markers': True,
-            'min_stable_frames': 5
+            'min_stable_frames': 5,
+            'voice_prompts_enabled': True
         }
 
     def _load_config_file(self, config_file):
@@ -249,6 +255,10 @@ class DistanceBasedAutoRecorder:
 
         Logger.info(f"AutoRecorder: STARTING RECORDING (distance < {self.start_threshold}mm)")
 
+        # Play voice prompt (non-blocking)
+        if self.voice_manager:
+            self.voice_manager.start_recording(blocking=False)
+
         # Call callback if set
         if self.on_recording_start:
             try:
@@ -265,6 +275,9 @@ class DistanceBasedAutoRecorder:
             duration = time.time() - self._recording_start_time
 
         Logger.info(f"AutoRecorder: STOPPING RECORDING (duration: {duration:.1f}s)")
+
+        # Note: StopRecording voice is disabled to avoid overlapping with saving_data voice
+        # The stop process will be communicated through the saving_data and save_success voices
 
         # Call callback if set
         if self.on_recording_stop:

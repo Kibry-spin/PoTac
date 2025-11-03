@@ -20,6 +20,7 @@ from src.gui.sensor_selector_dialog import SensorSelectorDialog
 from src.data.synchronized_recorder import SynchronizedRecorder
 from src.data.video_merger import merge_session_videos
 from src.data.auto_recorder import DistanceBasedAutoRecorder, AutoRecordingState
+from src.utils.voice_manager import VoiceManager
 from src.gui.tac3d_gui_extensions import (
     create_tac3d_control_button,
     update_tac3d_status_in_control_panel,
@@ -43,6 +44,9 @@ class MainWindow(BoxLayout):
         # Synchronized recorder
         self.sync_recorder = None
         self.recording_gui_fps = 15  # Lower FPS during recording to save resources
+
+        # Voice prompt manager
+        self.voice_manager = VoiceManager()
 
         # Auto-recording based on distance
         self.auto_recorder = DistanceBasedAutoRecorder(config_file='./config/settings.json')
@@ -736,6 +740,10 @@ class MainWindow(BoxLayout):
 
                 Logger.info(f"MainWindow: Recording complete - {duration:.1f}s, {total_frames} frames, {dropped} dropped")
 
+                # Play "saving data" voice prompt
+                if self.voice_manager:
+                    self.voice_manager.saving_data(blocking=False)
+
                 # Show merging status
                 self.status_label.text = 'Status: Merging videos...'
                 self.status_label.color = (1, 1, 0, 1)  # Yellow
@@ -773,6 +781,11 @@ class MainWindow(BoxLayout):
                 Logger.info(f"MainWindow: Session uses image sequence format, skipping video merge")
                 self.status_label.text = f'Status: Recording saved! {session_path.name}'
                 self.status_label.color = (0, 1, 0, 1)
+
+                # Play "save success" voice prompt
+                if self.voice_manager:
+                    self.voice_manager.save_success(blocking=False)
+
                 return
 
             Logger.info(f"MainWindow: Starting video merge for session: {session_dir}")
@@ -792,6 +805,10 @@ class MainWindow(BoxLayout):
                 # Update status (will show on next GUI update)
                 self.status_label.text = f'Status: Recording saved! {Path(session_dir).name}'
                 self.status_label.color = (0, 1, 0, 1)  # Green
+
+                # Play "save success" voice prompt
+                if self.voice_manager:
+                    self.voice_manager.save_success(blocking=False)
             else:
                 Logger.warning("MainWindow: Video merge failed")
                 self.status_label.text = 'Status: Merge failed (videos saved individually)'
