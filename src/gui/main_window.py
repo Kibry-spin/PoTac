@@ -56,6 +56,9 @@ class MainWindow(BoxLayout):
         self.setup_ui()
         self.setup_sensors()
 
+        # Update auto-recording GUI to reflect config file state
+        self._sync_auto_recorder_gui_state()
+
         # Scan for video devices on startup
         self.scan_video_devices()
 
@@ -1043,6 +1046,22 @@ class MainWindow(BoxLayout):
 
         except Exception as e:
             Logger.warning(f"MainWindow: Failed to update auto-recorder display: {e}")
+
+    def _sync_auto_recorder_gui_state(self):
+        """Sync GUI state with auto-recorder's actual state from config file"""
+        try:
+            if self.auto_recorder.is_enabled():
+                # Auto-recorder is enabled in config - update GUI
+                self.auto_rec_button.text = 'Disable Auto-Rec'
+                self.auto_rec_button.background_color = (1, 0.5, 0, 1)  # Orange
+                self.auto_record_status_label.text = 'Auto-Rec: IDLE'
+                self.auto_record_status_label.color = (1, 1, 0, 1)  # Yellow
+                Logger.info("MainWindow: Auto-recording GUI synced - ENABLED from config")
+            else:
+                # Auto-recorder is disabled - GUI already shows OFF by default
+                Logger.info("MainWindow: Auto-recording GUI synced - DISABLED from config")
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to sync auto-recorder GUI state: {e}")
 
     def auto_start_recording(self):
         """Callback for auto-recorder to start recording"""
