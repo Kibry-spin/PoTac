@@ -3,25 +3,38 @@ Central sensor management system
 """
 
 import time
+import json
+from pathlib import Path
 from threading import Thread, Lock
 from kivy.logger import Logger
 
 from .oak_camera import OAKCamera
+from .csi_camera import CSICamera
 from .visuotactile_sensor import VisuotactileSensorManager
 from .tac3d_sensor import Tac3DSensorManager
 
 
 class SensorManager:
-    """Manages OAK camera, visuotactile sensors, and Tac3D sensors"""
+    """Manages camera (OAK or CSI), visuotactile sensors, and Tac3D sensors"""
 
     def __init__(self):
         self.lock = Lock()
         self.initialized = False
         self.recording = False
 
-        # Initialize camera
+        # Initialize camera based on config
         config_path = "config/settings.json"
-        self.oak_camera = OAKCamera(config_file=config_path)
+        self.camera_type = self._get_camera_type(config_path)
+
+        if self.camera_type == "csi":
+            self.camera = CSICamera(config_file=config_path)
+            Logger.info("SensorManager: Using CSI camera")
+        else:
+            self.camera = OAKCamera(config_file=config_path)
+            Logger.info("SensorManager: Using OAK camera")
+
+        # Keep reference as oak_camera for backward compatibility
+        self.oak_camera = self.camera
 
         # Initialize visuotactile sensor manager
         self.vt_sensor_manager = VisuotactileSensorManager(config_file=config_path)
@@ -32,17 +45,31 @@ class SensorManager:
         # Data storage
         self.latest_data = {}
 
+    def _get_camera_type(self, config_path):
+        """Get camera type from config file"""
+        try:
+            if Path(config_path).exists():
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    return config.get('camera', {}).get('type', 'oak')
+        except Exception as e:
+            Logger.warning(f"SensorManager: Failed to read camera type from config: {e}")
+        return 'oak'  # Default to OAK camera
+
     def initialize(self):
         """Initialize camera, visuotactile sensors, and Tac3D sensors"""
         try:
             Logger.info("SensorManager: Initializing sensors...")
 
-            # Initialize OAK camera
-            oak_success = self.oak_camera.initialize()
-            if oak_success:
-                Logger.info("SensorManager: OAK camera initialized successfully")
+            # Initialize camera (OAK or CSI)
+            camera_success = self.camera.initialize()
+            if camera_success:
+                Logger.info(f"SensorManager: {self.camera_type.upper()} camera initialized successfully")
             else:
-                Logger.warning("SensorManager: OAK camera initialization failed")
+                Logger.warning(f"SensorManager: {self.camera_type.upper()} camera initialization failed")
+
+            # For backward compatibility
+            oak_success = camera_success
 
             # Initialize visuotactile sensors
             vt_success = self.vt_sensor_manager.initialize_all()
@@ -131,10 +158,10 @@ class SensorManager:
             if self.recording:
                 self.stop_recording()
 
-            # Stop OAK camera
-            if hasattr(self.oak_camera, 'stop'):
-                self.oak_camera.stop()
-                Logger.info("SensorManager: Stopped OAK camera")
+            # Stop camera (OAK or CSI)
+            if hasattr(self.camera, 'stop'):
+                self.camera.stop()
+                Logger.info(f"SensorManager: Stopped {self.camera_type.upper()} camera")
 
             # Stop visuotactile sensors
             self.vt_sensor_manager.stop_all()

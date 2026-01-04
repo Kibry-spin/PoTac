@@ -5,6 +5,17 @@
     "author": "PoTac Development Team"
   },
   "camera": {
+    "type": "csi",
+    "csi": {
+      "sensor_id": 0,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "flip_method": 0,
+      "enable_video_recording": true,
+      "video_quality": 95,
+      "record_fps": 30.0
+    },
     "oak": {
       "rgb_fps": 30,
       "rgb_resolution": "THE_1080_P",
@@ -21,10 +32,10 @@
   },
   "aruco_optimized": {
     "enabled": true,
-    "dictionary_type": "DICT_4X4_1000",
-    "marker_size": 0.015,
-    "left_id": 1,
-    "right_id": 809,
+    "dictionary_type": "DICT_4X4_50",
+    "marker_size": 0.01,
+    "left_id": 4,
+    "right_id": 1,
     "draw_markers": true,
     "draw_axes": false,
     "estimate_pose": false,
