@@ -362,6 +362,7 @@ class VisuotactileSensorManager:
         """
         self.sensors = {}
         self.config = self._load_config(config_file) if config_file else {}
+        self.default_config = self.config.get('default_config', {})
 
         Logger.info("VisuotactileSensorManager: Initialized")
 
@@ -374,11 +375,17 @@ class VisuotactileSensorManager:
 
             # Auto-add sensors from config
             if config.get('enabled', False) and 'sensors' in config:
+                # Get default config
+                default_config = config.get('default_config', {})
+
                 for sensor_config in config['sensors']:
                     sensor_id = sensor_config.get('id')
                     camera_id = sensor_config.get('camera_id')
                     name = sensor_config.get('name')
-                    sensor_settings = sensor_config.get('config', {})
+
+                    # Merge default config with sensor-specific config
+                    sensor_settings = default_config.copy()
+                    sensor_settings.update(sensor_config.get('config', {}))
 
                     if sensor_id and camera_id is not None:
                         self.add_sensor(sensor_id, camera_id, name, sensor_settings)
@@ -405,9 +412,15 @@ class VisuotactileSensorManager:
 
         try:
             sensor_name = name or f"VT_{sensor_id}"
-            sensor = VisuotactileSensor(camera_id, sensor_name, config)
+
+            # Merge default config with sensor-specific config
+            merged_config = self.default_config.copy()
+            if config:
+                merged_config.update(config)
+
+            sensor = VisuotactileSensor(camera_id, sensor_name, merged_config)
             self.sensors[sensor_id] = sensor
-            Logger.info(f"VisuotactileSensorManager: Added sensor '{sensor_id}'")
+            Logger.info(f"VisuotactileSensorManager: Added sensor '{sensor_id}' with resolution {merged_config.get('resolution', 'default')}")
             return True
 
         except Exception as e:

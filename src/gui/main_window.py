@@ -659,16 +659,23 @@ class MainWindow(BoxLayout):
                 sensor = self.sensor_manager.get_visuotactile_sensor(sensor_id)
                 if sensor and sensor.running:
                     # Pass the actual sensor object for direct frame access
-                    # Save at 320x240 resolution for visuotactile sensors
+                    # Get save resolution from sensor config (default to None = use capture resolution)
+                    save_res = sensor.config.get('resolution')
+                    if save_res and isinstance(save_res, (list, tuple)) and len(save_res) == 2:
+                        save_resolution = tuple(save_res)
+                    else:
+                        save_resolution = None  # Use capture resolution
+
                     self.sync_recorder.add_sensor(
                         sensor_id,
                         sensor.name,
                         sensor,
                         fps=30,
-                        save_resolution=(320, 240)  # Resize to 320x240 for saving
+                        save_resolution=save_resolution
                     )
                     vt_count += 1
-                    Logger.info(f"MainWindow: Added '{sensor.name}' to recording (save at 320x240)")
+                    res_str = f"{save_resolution[0]}x{save_resolution[1]}" if save_resolution else "original"
+                    Logger.info(f"MainWindow: Added '{sensor.name}' to recording (save at {res_str})")
 
 
             # Add all Tac3D sensors
