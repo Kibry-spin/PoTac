@@ -250,22 +250,33 @@ class VisuotactileSensor:
             return False
 
         try:
+            # Ensure previous recording is fully stopped
+            if self.video_writer is not None:
+                Logger.warning(f"VisuotactileSensor: Cleaning up previous video writer")
+                try:
+                    self.video_writer.release()
+                except:
+                    pass
+                self.video_writer = None
+                time.sleep(0.1)
+
             # Ensure output directory exists
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Get frame dimensions
-            frame = self.get_frame()
+            frame = self.get_frame_bgr()
             if frame is None:
                 Logger.error(f"VisuotactileSensor: No frame available for recording")
                 return False
 
             height, width = frame.shape[:2]
 
-            # Create video writer
+            # Create video writer with better codec settings
             fourcc = cv2.VideoWriter_fourcc(*self.config['record_fourcc'])
             fps = self.config['fps']
 
+            # Important: Create fresh VideoWriter object
             self.video_writer = cv2.VideoWriter(
                 str(output_path),
                 fourcc,
@@ -287,6 +298,8 @@ class VisuotactileSensor:
 
         except Exception as e:
             Logger.error(f"VisuotactileSensor: Failed to start recording - {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def stop_recording(self):
@@ -297,12 +310,23 @@ class VisuotactileSensor:
         try:
             self.recording = False
 
+            # Wait a bit for capture thread to finish writing
+            time.sleep(0.2)
+
             if self.video_writer:
+                # Release the video writer
                 self.video_writer.release()
                 self.video_writer = None
 
+                # Important: Wait for file to be fully written and released
+                time.sleep(0.1)
+
             duration = time.time() - self.record_start_time if self.record_start_time else 0
             Logger.info(f"VisuotactileSensor: Stopped recording '{self.name}' - {self.frames_recorded} frames, {duration:.1f}s")
+
+            # Reset recording state
+            self.record_start_time = None
+            self.frames_recorded = 0
 
         except Exception as e:
             Logger.error(f"VisuotactileSensor: Error stopping recording - {e}")

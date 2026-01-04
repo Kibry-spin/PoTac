@@ -100,6 +100,7 @@
     "default_session_name_format": "potac_session_%Y%m%d_%H%M%S",
     "max_recording_duration_hours": 24,
     "low_space_warning_gb": 5.0,
+    "voice_prompts_enabled": false,
     "distance_based_auto_recording": {
       "enabled": true,
       "start_threshold_mm": 85.0,
@@ -107,7 +108,8 @@
       "use_horizontal_distance": true,
       "cooldown_seconds": 2.0,
       "require_both_markers": true,
-      "min_stable_frames": 5
+      "min_stable_frames": 5,
+      "voice_prompts_enabled": false
     }
   },
   "visuotactile_sensors": {

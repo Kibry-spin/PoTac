@@ -9,8 +9,10 @@ from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.textinput import TextInput
+from kivy.uix.popup import Popup
 from kivy.graphics.texture import Texture
 from kivy.logger import Logger
+from kivy.core.window import Window
 import numpy as np
 import time
 from pathlib import Path
@@ -20,6 +22,7 @@ from src.gui.sensor_selector_dialog import SensorSelectorDialog
 from src.data.synchronized_recorder import SynchronizedRecorder
 from src.data.video_merger import merge_session_videos
 from src.data.auto_recorder import DistanceBasedAutoRecorder, AutoRecordingState
+from src.data.four_stage_recorder import FourStageRecorder, RecordingStage
 from src.utils.voice_manager import VoiceManager
 from src.gui.tac3d_gui_extensions import (
     create_tac3d_control_button,
@@ -45,13 +48,24 @@ class MainWindow(BoxLayout):
         self.sync_recorder = None
         self.recording_gui_fps = 15  # Lower FPS during recording to save resources
 
+        # Load voice settings from config
+        voice_enabled = self._load_voice_settings()
+
         # Voice prompt manager
-        self.voice_manager = VoiceManager()
+        self.voice_manager = VoiceManager() if voice_enabled else None
+        if not voice_enabled:
+            Logger.info("MainWindow: Voice prompts disabled by configuration")
 
         # Auto-recording based on distance
         self.auto_recorder = DistanceBasedAutoRecorder(config_file='./config/settings.json')
         self.auto_recorder.on_recording_start = self.auto_start_recording
         self.auto_recorder.on_recording_stop = self.auto_stop_recording
+
+        # Four-stage recorder for SPACE key control
+        self.four_stage_recorder = FourStageRecorder(output_dir='./data')
+
+        # Keyboard shortcut settings
+        self.keyboard_shortcuts_enabled = True  # Enable keyboard shortcuts by default
 
         self.setup_ui()
         self.setup_sensors()
@@ -61,6 +75,25 @@ class MainWindow(BoxLayout):
 
         # Scan for video devices on startup
         self.scan_video_devices()
+
+        # Bind keyboard events for shortcuts
+        self._bind_keyboard_shortcuts()
+
+    def _load_voice_settings(self):
+        """Load voice settings from config file"""
+        try:
+            import json
+            config_path = './config/settings.json'
+            if Path(config_path).exists():
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                # Check recording.voice_prompts_enabled (global setting)
+                voice_enabled = config.get('recording', {}).get('voice_prompts_enabled', True)
+                Logger.info(f"MainWindow: Voice prompts {'enabled' if voice_enabled else 'disabled'} from config")
+                return voice_enabled
+        except Exception as e:
+            Logger.warning(f"MainWindow: Failed to load voice settings: {e}")
+        return True  # Default to enabled
 
     def setup_ui(self):
         """Initialize the user interface"""
@@ -253,14 +286,14 @@ class MainWindow(BoxLayout):
         self.camera_button.bind(on_press=self.toggle_camera)
         control_bar.add_widget(self.camera_button)
 
-        # Start/Stop recording
+        # Start/Stop recording (now status indicator only, controlled by SPACE key)
         self.record_button = Button(
-            text='Start Recording',
+            text='Press SPACE to Start',
             size_hint_x=0.2,
             background_color=(0, 1, 0, 1),
-            disabled=True
+            disabled=True  # Button is now status indicator only
         )
-        self.record_button.bind(on_press=self.toggle_recording)
+        # No binding - controlled entirely by SPACE key
         control_bar.add_widget(self.record_button)
 
         # ArUco toggle
@@ -545,7 +578,6 @@ class MainWindow(BoxLayout):
             if self.start_camera():
                 self.camera_button.text = 'Stop Camera'
                 self.camera_button.background_color = (1, 0.5, 0, 1)  # Orange
-                self.record_button.disabled = False
             else:
                 self.status_label.text = 'Status: Camera start failed'
                 self.status_label.color = (1, 0, 0, 1)  # Red
@@ -553,7 +585,6 @@ class MainWindow(BoxLayout):
             self.stop_camera()
             self.camera_button.text = 'Start Camera'
             self.camera_button.background_color = (0, 0.7, 1, 1)  # Blue
-            self.record_button.disabled = True
 
     def start_camera(self):
         """Start camera preview and visuotactile sensors"""
@@ -581,8 +612,25 @@ class MainWindow(BoxLayout):
                 success = True
 
             if success:
-                self.status_label.text = 'Status: Sensors running'
+                # Configure four-stage recorder with sensors
+                vt_sensors = self.sensor_manager.get_connected_visuotactile_sensors()
+                vt_sensor = None
+                if vt_sensors:
+                    vt_sensor = self.sensor_manager.get_visuotactile_sensor(vt_sensors[0])
+                    Logger.info(f"MainWindow: Using VT sensor: {vt_sensors[0]}")
+
+                self.four_stage_recorder.set_sensors(
+                    csi_camera=self.sensor_manager.oak_camera,
+                    vt_sensor=vt_sensor
+                )
+                Logger.info("MainWindow: Four-stage recorder configured with sensors")
+
+                self.status_label.text = 'Status: Sensors running (Press SPACE to start recording)'
                 self.status_label.color = (0, 1, 0, 1)  # Green
+
+                # Update recording button to show initial state
+                self.update_recording_button_state()
+
                 return True
             else:
                 self.status_label.text = 'Status: Failed to start sensors'
@@ -1113,3 +1161,231 @@ class MainWindow(BoxLayout):
 
         except Exception as e:
             Logger.error(f"MainWindow: Failed to auto-stop recording: {e}")
+    def _bind_keyboard_shortcuts(self):
+        """Bind keyboard shortcuts for recording control"""
+        try:
+            Window.bind(on_keyboard=self._on_keyboard_event)
+            Logger.info("MainWindow: Keyboard shortcuts enabled (SPACE = toggle recording)")
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to bind keyboard shortcuts: {e}")
+
+    def _unbind_keyboard_shortcuts(self):
+        """Unbind keyboard shortcuts"""
+        try:
+            Window.unbind(on_keyboard=self._on_keyboard_event)
+            Logger.info("MainWindow: Keyboard shortcuts disabled")
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to unbind keyboard shortcuts: {e}")
+
+    def _on_keyboard_event(self, window, key, scancode, codepoint, modifier):
+        """
+        Handle keyboard events
+
+        Args:
+            window: Kivy window instance
+            key: Key code
+            scancode: Scan code
+            codepoint: Unicode codepoint
+            modifier: List of modifiers (e.g., ['shift', 'ctrl'])
+
+        Returns:
+            True if event was handled, False otherwise
+        """
+        if not self.keyboard_shortcuts_enabled:
+            return False
+
+        try:
+            # SPACE key (keycode 32) - Four-stage recording control
+            if key == 32:  # Spacebar
+                # Check if any TextInput has focus
+                # If TextInput is focused, let it handle the space key normally
+                from kivy.core.window import Window as KivyWindow
+                if hasattr(KivyWindow, 'focus') and isinstance(KivyWindow.focus, TextInput):
+                    return False  # Let TextInput handle the space key
+
+                # Handle four-stage recording
+                result = self.four_stage_recorder.handle_space_press()
+
+                if result['success']:
+                    stage = result['stage']
+                    message = result['message']
+
+                    # Update recording button state
+                    self.update_recording_button_state()
+
+                    # Update status label
+                    stage_names = {
+                        RecordingStage.STAGE_1: "Stage 1/4: CSI + VT recording",
+                        RecordingStage.STAGE_2: "Stage 2/4: VT saved to static/, CSI continues",
+                        RecordingStage.STAGE_3: "Stage 3/4: VT restarted, CSI continues",
+                        RecordingStage.STAGE_4: "Stage 4/4: All completed!"
+                    }
+
+                    self.status_label.text = f'Status: {stage_names.get(stage, message)}'
+
+                    if stage == RecordingStage.STAGE_4:
+                        self.status_label.color = (0, 1, 0, 1)  # Green - completed
+                        Logger.info(f"MainWindow: Recording completed - {result.get('session_dir')}")
+                        # Show label input popup instead of auto-reset
+                        self._show_label_input_popup(result.get('session_dir'))
+                    else:
+                        self.status_label.color = (1, 0, 0, 1)  # Red - recording
+
+                    Logger.info(f"MainWindow: SPACE pressed - {message}")
+                else:
+                    Logger.warning(f"MainWindow: SPACE press failed - {result.get('message')}")
+
+                return True  # Event handled
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Error handling keyboard event: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+        return False  # Event not handled
+
+    def _reset_recording(self):
+        """Reset recording state to idle"""
+        self.four_stage_recorder.reset()
+        self.status_label.text = 'Status: Ready (Press SPACE to start)'
+        self.status_label.color = (0, 1, 0, 1)  # Green
+        self.update_recording_button_state()
+        Logger.info("MainWindow: Recording reset to IDLE")
+
+    def _show_label_input_popup(self, session_dir):
+        """Show popup to input label for the completed recording session"""
+        try:
+            # Create popup content
+            content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+
+            # Add instruction label
+            instruction = Label(
+                text='Enter label for this recording session:',
+                size_hint_y=0.3,
+                color=(1, 1, 1, 1)
+            )
+            content.add_widget(instruction)
+
+            # Create TextInput for label
+            label_input = TextInput(
+                text='',
+                multiline=False,
+                size_hint_y=0.4,
+                hint_text='e.g., "grasp_object_1", "touch_test_soft"',
+                font_size='18sp'
+            )
+            content.add_widget(label_input)
+
+            # Create popup
+            popup = Popup(
+                title='Recording Completed - Enter Label',
+                content=content,
+                size_hint=(0.6, 0.35),
+                auto_dismiss=False
+            )
+
+            def on_text_validate(instance):
+                """Handle Enter key press"""
+                label_text = label_input.text.strip()
+                self._save_label_and_reset(session_dir, label_text)
+                popup.dismiss()
+
+            def on_popup_open(instance):
+                """Auto-focus the TextInput when popup opens"""
+                from kivy.clock import Clock
+                Clock.schedule_once(lambda dt: setattr(label_input, 'focus', True), 0.1)
+
+            # Bind Enter key to save
+            label_input.bind(on_text_validate=on_text_validate)
+            popup.bind(on_open=on_popup_open)
+
+            # Show popup
+            popup.open()
+            Logger.info("MainWindow: Label input popup opened")
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to show label input popup: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback: reset without label
+            self._reset_recording()
+
+    def _save_label_and_reset(self, session_dir, label):
+        """Save label to session metadata and reset recording state"""
+        try:
+            if session_dir:
+                import json
+                metadata_path = Path(session_dir) / "session_metadata.json"
+
+                if metadata_path.exists():
+                    # Load existing metadata
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+
+                    # Add label
+                    metadata['label'] = label if label else "unlabeled"
+
+                    # Save updated metadata
+                    with open(metadata_path, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+
+                    Logger.info(f"MainWindow: Label saved: '{label}' for session {session_dir}")
+                else:
+                    Logger.warning(f"MainWindow: Metadata file not found: {metadata_path}")
+
+            # Reset recording state for next session
+            self._reset_recording()
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to save label: {e}")
+            import traceback
+            traceback.print_exc()
+            # Still reset even if saving failed
+            self._reset_recording()
+
+    def update_recording_button_state(self):
+        """Update recording button text and color based on current stage"""
+        try:
+            current_stage = self.four_stage_recorder.get_current_stage()
+
+            # Define button states for each stage
+            button_states = {
+                RecordingStage.IDLE: {
+                    'text': 'Press SPACE to Start',
+                    'color': (0, 1, 0, 1),  # Green
+                },
+                RecordingStage.STAGE_1: {
+                    'text': 'Stage 1/4: Recording...',
+                    'color': (1, 0, 0, 1),  # Red
+                },
+                RecordingStage.STAGE_2: {
+                    'text': 'Stage 2/4: CSI Only...',
+                    'color': (1, 0.5, 0, 1),  # Orange
+                },
+                RecordingStage.STAGE_3: {
+                    'text': 'Stage 3/4: Recording...',
+                    'color': (1, 0, 0, 1),  # Red
+                },
+                RecordingStage.STAGE_4: {
+                    'text': 'Stage 4/4: Completed!',
+                    'color': (0, 0.7, 1, 1),  # Blue
+                }
+            }
+
+            state = button_states.get(current_stage, button_states[RecordingStage.IDLE])
+            self.record_button.text = state['text']
+            self.record_button.background_color = state['color']
+
+        except Exception as e:
+            Logger.error(f"MainWindow: Failed to update recording button state: {e}")
+
+    def toggle_keyboard_shortcuts(self, enabled):
+        """
+        Enable or disable keyboard shortcuts
+
+        Args:
+            enabled: True to enable, False to disable
+        """
+        self.keyboard_shortcuts_enabled = enabled
+        Logger.info(f"MainWindow: Keyboard shortcuts {'enabled' if enabled else 'disabled'}")
